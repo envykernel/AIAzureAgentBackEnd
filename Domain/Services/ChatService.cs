@@ -66,70 +66,9 @@ public class ChatService : IChatService
         return session;
     }
 
-    public async Task<(Message message, ChatSession updatedSession)> SendMessageAsync(string sessionId, string content, Entities.MessageRole role, int tokenCount)
+    public async Task<AgentResponse> GenerateAgentResponseAsync(Message userMessage,string? agentThreadId = null)
     {
-        var message = new Message
-        {
-            Id = Guid.NewGuid().ToString(),
-            SessionId = sessionId,
-            Role = role,
-            Content = content,
-            TokenCount = tokenCount,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _messageRepository.CreateAsync(message);
-        
-        // Update session token count and last activity
-        var session = await _sessionRepository.GetByIdAsync(sessionId);
-        if (session != null)
-        {
-            session.TokenCount += message.TokenCount;
-            session.MessageCount++;
-            session.LastActivityAt = DateTime.UtcNow;
-            await _sessionRepository.UpdateAsync(session);
-        }
-
-        return (message, session ?? throw new InvalidOperationException($"Session {sessionId} not found after update"));
-    }
-
-    public async Task<IEnumerable<Message>> GetConversationAsync(string sessionId, int maxTokens = 4000)
-    {
-        var messages = await _messageRepository.GetBySessionIdOrderedAsync(sessionId);
-        var conversation = new List<Message>();
-        var currentTokenCount = 0;
-        
-        // Get conversation summary if exists
-        var summary = await _summaryRepository.GetBySessionIdAsync(sessionId);
-        if (summary != null)
-        {
-            currentTokenCount += summary.TokenCount;
-        }
-        
-        // Add messages in reverse order (newest first) until we hit token limit
-        foreach (var message in messages.Reverse())
-        {
-            if (currentTokenCount + message.TokenCount > maxTokens)
-            {
-                break;
-            }
-            
-            conversation.Insert(0, message);
-            currentTokenCount += message.TokenCount;
-        }
-        
-        return conversation;
-    }
-
-
-
-    public async Task<AgentResponse> GenerateAgentResponseAsync(IEnumerable<Message> conversation, string? agentThreadId = null)
-    {
-       conversation = conversation.Count() <= 2 
-            ? conversation 
-            : new[] { conversation.First()};
-
-        Console.WriteLine($"Filtered messages count: {conversation.Count()}");
+      
         
         AzureAIAgentThread thread;
 
@@ -160,25 +99,18 @@ public class ChatService : IChatService
          thread = new AzureAIAgentThread(client: masterAgent.Client, messages: threadMessages);
         }
         else
-       
         {
-         // Create ThreadMessageOptions from conversation
-         /*var threadMessages = CreateThreadMessageOptionsFromConversation(conversation);
-         Console.WriteLine("We use full thread messages");
-         Console.WriteLine($"Full thread messages count: {threadMessages.Count}");*/
          thread = new AzureAIAgentThread(client: masterAgent.Client);
         }
 
 
         try
         {
-            // Generate the agent response(s)
-            var lastUserMessage = conversation.LastOrDefault(m => m.Role == Entities.MessageRole.User)?.Content ?? "Hello";
-            Console.WriteLine($"Generating agent response for message: {lastUserMessage}");
+            Console.WriteLine($"Generating agent response for message: {userMessage.Content}");
            
             
             
-            await foreach (ChatMessageContent response in masterAgent.InvokeAsync(new ChatMessageContent(AuthorRole.User, lastUserMessage), thread))
+            await foreach (ChatMessageContent response in masterAgent.InvokeAsync(new ChatMessageContent(AuthorRole.User, userMessage.Content), thread))
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("Thread id*: " + thread.Id);
@@ -225,15 +157,6 @@ public class ChatService : IChatService
         }
     }
 
-    public async Task<ChatSession?> GetActiveSessionAsync(string sessionId)
-    {
-        return await _sessionRepository.GetActiveSessionAsync(sessionId);
-    }
-
-    public async Task<bool> DeactivateSessionAsync(string sessionId)
-    {
-        return await _sessionRepository.DeactivateSessionAsync(sessionId);
-    }
 
     public int EstimateTokenCount(string text)
     {

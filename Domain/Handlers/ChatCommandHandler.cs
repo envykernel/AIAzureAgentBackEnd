@@ -20,54 +20,30 @@ public class ChatCommandHandler : IChatCommandHandler
 
     public async Task<ChatResponse> HandleAsync(ChatRequest request)
     {
-        ChatSession? session;
-        bool isNewSession = false;
-        
-        // Check if user has an active session
-        if (string.IsNullOrEmpty(request.SessionId))
+        Message message = new Message
         {
-            // Create new session
-            session = await _chatService.CreateSessionAsync();
-            isNewSession = true;
-        }
-        else
-        {
-            session = await _chatService.GetActiveSessionAsync(request.SessionId);
-            if (session == null)
-            {
-                throw new InvalidOperationException("Invalid or inactive session ID");
-            }
-        }
-        
-        // Store user message
-        var (userMessage, sessionAfterUserMessage) = await _chatService.SendMessageAsync(session.Id, request.Message, MessageRole.User, 0);
-        
-        // Get conversation context and generate agent response
-        var conversation = await _chatService.GetConversationAsync(session.Id);
-
-        //Keeponly the last message but always in a list
-        conversation = new[] { conversation.Last() };
-
-        var agentThreadId = string.IsNullOrEmpty(request.AgentThreadId) ? _azureConfig.DefaultAgentThreadId : request.AgentThreadId;
-        var agentResponse = await _chatService.GenerateAgentResponseAsync(conversation, agentThreadId);
-
-        var (agentMessage, finalSession) = await _chatService.SendMessageAsync(session.Id, agentResponse.Content, MessageRole.Assistant, agentResponse.TokenCount);
-        
+            Content = request.Message,
+            Role = MessageRole.User,
+            CreatedAt = DateTime.UtcNow
+        };
+        var agentResponse = await _chatService.GenerateAgentResponseAsync(message, request.AgentThreadId);
+      
+     
         return new ChatResponse
         {
-            SessionId = finalSession.Id,
+            SessionId = agentResponse.AgentThreadId,
             Message = agentResponse.Content,
             Role = MessageRole.Assistant.ToString(),
-            Timestamp = agentMessage.CreatedAt,
+            Timestamp = DateTime.UtcNow,
             TokenCount = agentResponse.TokenCount,
-            IsNewSession = isNewSession,
+            IsNewSession = string.IsNullOrEmpty(request.AgentThreadId),
             AgentThreadId = agentResponse.AgentThreadId,
             // Nouvelles propriétés pour la gestion des tokens et messages
-            TotalMessageCount = finalSession.MessageCount,
-            TotalTokenCount = finalSession.TokenCount,
-            MaxTokens = finalSession.MaxTokens,
-            RemainingTokens = finalSession.MaxTokens - finalSession.TokenCount,
-            TokenUsagePercentage = (double)finalSession.TokenCount / finalSession.MaxTokens * 100.0
+            TotalMessageCount = 0,
+            TotalTokenCount = 0,
+            MaxTokens = 0,
+            RemainingTokens = 0,//finalSession.MaxTokens - finalSession.TokenCount,
+            TokenUsagePercentage = 0//(double)finalSession.TokenCount / finalSession.MaxTokens * 100.0
         };
     }
 }

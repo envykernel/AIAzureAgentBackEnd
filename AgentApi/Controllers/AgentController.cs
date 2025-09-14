@@ -44,41 +44,5 @@ public class AgentController : ControllerBase
         }
     }
 
-    [HttpGet("sessions/{sessionId}")]
-    public async Task<ActionResult<ChatSession>> GetSession(string sessionId)
-    {
-        try
-        {
-            var session = await _chatService.GetActiveSessionAsync(sessionId);
-            if (session == null)
-            {
-                return NotFound("Session not found or inactive");
-            }
-            return Ok(session);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting session: {SessionId}", sessionId);
-            return StatusCode(500, "An error occurred while retrieving the session");
-        }
-    }
-
-    [HttpPost("sessions/{sessionId}/deactivate")]
-    public async Task<ActionResult> DeactivateSession(string sessionId)
-    {
-        try
-        {
-            var success = await _chatService.DeactivateSessionAsync(sessionId);
-            if (success)
-            {
-                return Ok(new { message = "Session deactivated successfully" });
-            }
-            return NotFound("Session not found");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deactivating session: {SessionId}", sessionId);
-            return StatusCode(500, "An error occurred while deactivating the session");
-        }
-    }
+   
 }
