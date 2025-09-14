@@ -1,0 +1,543 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MultiAgentsBeta API",
+    "description": "API for MultiAgentsBeta chat functionality with AI agents. Supports session management, conversation handling, automatic token management with real-time statistics, and intelligent conversation summarization when token limits are approached.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "MultiAgentsBeta Team",
+      "email": "support@multagentsbeta.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5107",
+      "description": "Development server (HTTP)"
+    },
+    {
+      "url": "https://localhost:7148",
+      "description": "Development server (HTTPS)"
+    },
+    {
+      "url": "http://localhost:5108",
+      "description": "Alternative development server"
+    }
+  ],
+  "paths": {
+    "/api/agent/chat": {
+      "post": {
+        "summary": "Send a chat message",
+        "description": "Send a chat message to the AI agent. If no sessionId is provided, a new session will be created automatically. The response includes the agent's reply, session information, and comprehensive token management statistics including total message count, total token usage, remaining tokens, and usage percentage. The system automatically summarizes conversations when token usage exceeds 80% of the limit.",
+        "operationId": "sendChatMessage",
+        "tags": ["Chat"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              },
+              "examples": {
+                "newSession": {
+                  "summary": "Create new session",
+                  "description": "Start a new conversation by leaving sessionId empty",
+                  "value": {
+                    "sessionId": "",
+                    "message": "Hello, how can you help me today?"
+                  }
+                },
+                "existingSession": {
+                  "summary": "Continue existing session",
+                  "description": "Continue a conversation using an existing session ID",
+                  "value": {
+                    "sessionId": "session_123456",
+                    "message": "Continue our conversation about AI agents"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chat message processed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                },
+                "examples": {
+                  "newSession": {
+                    "summary": "New session response",
+                    "value": {
+                      "sessionId": "session_789012",
+                      "message": "Hello! I'm your AI assistant. I can help you with various tasks. How can I assist you today?",
+                      "role": "assistant",
+                      "timestamp": "2024-01-15T10:30:00Z",
+                      "tokenCount": 45,
+                      "isNewSession": true,
+                      "totalMessageCount": 2,
+                      "totalTokenCount": 45,
+                      "maxTokens": 4000,
+                      "remainingTokens": 3955,
+                      "tokenUsagePercentage": 1.125
+                    }
+                  },
+                  "existingSession": {
+                    "summary": "Existing session response",
+                    "value": {
+                      "sessionId": "session_123456",
+                      "message": "I understand you want to continue our conversation about AI agents. What specific aspect would you like to explore?",
+                      "role": "assistant",
+                      "timestamp": "2024-01-15T10:35:00Z",
+                      "tokenCount": 38,
+                      "isNewSession": false,
+                      "totalMessageCount": 8,
+                      "totalTokenCount": 1250,
+                      "maxTokens": 4000,
+                      "remainingTokens": 2750,
+                      "tokenUsagePercentage": 31.25
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - Invalid session ID or request format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "message": "Invalid or inactive session ID"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "message": "An error occurred while processing your request"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/sessions/{sessionId}": {
+      "get": {
+        "summary": "Get session details",
+        "description": "Retrieve detailed information about a specific chat session including message count, token usage, and activity status.",
+        "operationId": "getSession",
+        "tags": ["Sessions"],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Unique identifier of the chat session",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "example": "session_123456"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session details retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSession"
+                },
+                "example": {
+                  "id": "session_123456",
+                  "createdAt": "2024-01-15T10:00:00Z",
+                  "lastActivityAt": "2024-01-15T10:35:00Z",
+                  "isActive": true,
+                  "messageCount": 8,
+                  "tokenCount": 1250,
+                  "maxTokens": 4000
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found or inactive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "message": "Session not found or inactive"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "message": "An error occurred while retrieving the session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/sessions/{sessionId}/deactivate": {
+      "post": {
+        "summary": "Deactivate session",
+        "description": "Deactivate a chat session. This will mark the session as inactive and prevent further messages from being processed.",
+        "operationId": "deactivateSession",
+        "tags": ["Sessions"],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "description": "Unique identifier of the chat session to deactivate",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "example": "session_123456"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session deactivated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeactivateResponse"
+                },
+                "example": {
+                  "message": "Session deactivated successfully"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "message": "Session not found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "message": "An error occurred while deactivating the session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test/cors": {
+      "get": {
+        "summary": "Test CORS configuration",
+        "description": "Test endpoint to verify that CORS is properly configured and working. Returns CORS status and origin information.",
+        "operationId": "testCors",
+        "tags": ["Testing"],
+        "responses": {
+          "200": {
+            "description": "CORS test successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "CORS is working!"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2024-01-15T10:30:00Z"
+                    },
+                    "origin": {
+                      "type": "string",
+                      "example": "http://localhost:5174"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "CORS is working!",
+                  "timestamp": "2024-01-15T10:30:00Z",
+                  "origin": "http://localhost:5174"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test/health": {
+      "get": {
+        "summary": "API health check",
+        "description": "Health check endpoint to verify API status and environment information.",
+        "operationId": "healthCheck",
+        "tags": ["Testing"],
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2024-01-15T10:30:00Z"
+                    },
+                    "environment": {
+                      "type": "string",
+                      "example": "Development"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "healthy",
+                  "timestamp": "2024-01-15T10:30:00Z",
+                  "environment": "Development"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatRequest": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "The user's message to send to the AI agent",
+            "minLength": 1,
+            "maxLength": 10000,
+            "example": "Hello, how can you help me today?"
+          },
+          "sessionId": {
+            "type": "string",
+            "description": "Optional session ID. If empty or null, a new session will be created",
+            "nullable": true,
+            "example": "session_123456"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatResponse": {
+        "type": "object",
+        "required": ["sessionId", "message", "role", "timestamp"],
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Unique identifier of the chat session",
+            "example": "session_789012"
+          },
+          "message": {
+            "type": "string",
+            "description": "The AI agent's response message",
+            "example": "Hello! I'm your AI assistant. How can I help you today?"
+          },
+          "role": {
+            "type": "string",
+            "description": "Role of the message sender (always 'assistant' for responses)",
+            "enum": ["assistant"],
+            "example": "assistant"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the response was generated",
+            "example": "2024-01-15T10:30:00Z"
+          },
+          "tokenCount": {
+            "type": "integer",
+            "description": "Number of tokens in the current response message",
+            "minimum": 0,
+            "example": 45
+          },
+          "isNewSession": {
+            "type": "boolean",
+            "description": "Indicates whether this response is from a newly created session",
+            "example": true
+          },
+          "totalMessageCount": {
+            "type": "integer",
+            "description": "Total number of messages in the session",
+            "minimum": 0,
+            "example": 8
+          },
+          "totalTokenCount": {
+            "type": "integer",
+            "description": "Total tokens used across all messages in the session",
+            "minimum": 0,
+            "example": 1250
+          },
+          "maxTokens": {
+            "type": "integer",
+            "description": "Maximum allowed tokens for the session",
+            "minimum": 1,
+            "example": 4000
+          },
+          "remainingTokens": {
+            "type": "integer",
+            "description": "Number of tokens remaining before reaching the limit",
+            "minimum": 0,
+            "example": 2750
+          },
+          "tokenUsagePercentage": {
+            "type": "number",
+            "format": "double",
+            "description": "Percentage of tokens used in the session (0.0 to 100.0)",
+            "minimum": 0.0,
+            "maximum": 100.0,
+            "example": 31.25
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChatSession": {
+        "type": "object",
+        "required": ["id", "createdAt", "lastActivityAt", "isActive", "messageCount", "tokenCount", "maxTokens"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the chat session",
+            "example": "session_123456"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the session was created",
+            "example": "2024-01-15T10:00:00Z"
+          },
+          "lastActivityAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of the last activity in the session",
+            "example": "2024-01-15T10:35:00Z"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the session is currently active",
+            "example": true
+          },
+          "messageCount": {
+            "type": "integer",
+            "description": "Total number of messages in the session",
+            "minimum": 0,
+            "example": 8
+          },
+          "tokenCount": {
+            "type": "integer",
+            "description": "Current token count in the session",
+            "minimum": 0,
+            "example": 1250
+          },
+          "maxTokens": {
+            "type": "integer",
+            "description": "Maximum allowed tokens for the session",
+            "minimum": 1,
+            "example": 4000
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeactivateResponse": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Success message confirming session deactivation",
+            "example": "Session deactivated successfully"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Error message describing what went wrong",
+            "example": "An error occurred while processing your request"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key for authentication"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Chat",
+      "description": "Chat operations for sending messages and receiving AI agent responses"
+    },
+    {
+      "name": "Sessions",
+      "description": "Session management operations including retrieval and deactivation"
+    },
+    {
+      "name": "Testing",
+      "description": "Endpoints for testing API functionality"
+    }
+  ],
+  "externalDocs": {
+    "description": "MultiAgentsBeta Documentation",
+    "url": "https://docs.multagentsbeta.com"
+  }
+}

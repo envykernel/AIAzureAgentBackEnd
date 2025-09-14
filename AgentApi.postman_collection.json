@@ -1,0 +1,190 @@
+{
+	"info": {
+		"_postman_id": "your-unique-id-here",
+		"name": "MultiAgentsBeta API",
+		"description": "API collection for testing MultiAgentsBeta chat functionality",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Chat",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"sessionId\": \"\",\n  \"message\": \"Hello, how can you help me today?\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/agent/chat",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"agent",
+						"chat"
+					]
+				},
+				"description": "Send a chat message and get agent response. Leave sessionId empty for new session. This request automatically stores the returned session ID for use in other routes. Returns comprehensive token management statistics including total message count, total token usage, remaining tokens, and usage percentage. The system automatically summarizes conversations when token usage exceeds 80% of the limit."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Extract session ID from response and store it in collection variable",
+							"if (pm.response.code === 200) {",
+							"    const responseJson = pm.response.json();",
+							"    if (responseJson.sessionId) {",
+							"        pm.collectionVariables.set(\"sessionId\", responseJson.sessionId);",
+							"        console.log(\"Session ID stored:\", responseJson.sessionId);",
+							"    } else {",
+							"        console.log(\"No session ID found in response\");",
+							"    }",
+							"} else {",
+							"    console.log(\"Request failed with status:\", pm.response.code);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
+		},
+		{
+			"name": "Chat with Existing Session",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"Continue our conversation\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/agent/chat",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"agent",
+						"chat"
+					]
+				},
+				"description": "Send a chat message using the session ID stored from the first Chat request. Returns comprehensive token management statistics including total message count, total token usage, remaining tokens, and usage percentage."
+			}
+		},
+		{
+			"name": "Get Session",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/agent/sessions/{{sessionId}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"agent",
+						"sessions",
+						"{{sessionId}}"
+					]
+				},
+				"description": "Get session details by session ID including message count, token usage, and activity status"
+			}
+		},
+		{
+			"name": "Deactivate Session",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/agent/sessions/{{sessionId}}/deactivate",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"agent",
+						"sessions",
+						"{{sessionId}}",
+						"deactivate"
+					]
+				},
+				"description": "Deactivate a chat session to prevent further messages"
+			}
+		},
+		{
+			"name": "Test CORS",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/test/cors",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"test",
+						"cors"
+					]
+				},
+				"description": "Test CORS configuration to verify frontend can call the API successfully"
+			}
+		},
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/test/health",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"test",
+						"health"
+					]
+				},
+				"description": "Check API health status and environment information"
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:5107",
+			"type": "string"
+		},
+		{
+			"key": "baseUrlHttps",
+			"value": "https://localhost:7148",
+			"type": "string"
+		},
+		{
+			"key": "baseUrlAlternative",
+			"value": "http://localhost:5108",
+			"type": "string"
+		},
+		{
+			"key": "sessionId",
+			"value": "session_123456",
+			"type": "string",
+			"description": "Session ID automatically stored from the first Chat request"
+		}
+	]
+}

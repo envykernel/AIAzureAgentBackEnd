@@ -1,0 +1,175 @@
+[
+    {
+      "name": "Accueil",
+      "url": "/",
+      "description": "Page principale avec résumé du compte client et accès rapide aux sections importantes.",
+      "intents": ["accueil", "dashboard", "home", "page principale"],
+      "procedures": []
+    },
+    {
+      "name": "Commandes",
+      "url": "/espace-client/commandes",
+      "description": "Page listant toutes les commandes passées avec options de suivi, retour ou annulation.",
+      "intents": ["commandes", "mes achats", "historique de commandes", "suivre une commande"],
+      "procedures": [
+        {
+          "name": "Annuler une commande",
+          "intents": ["annuler commande", "supprimer commande", "je me suis trompé de commande"],
+          "steps": [
+            { "instruction": "Allez sur la page 'Commandes'." },
+            { "instruction": "Trouvez la commande que vous souhaitez annuler." },
+            { "instruction": "Cliquez sur 'Voir détails' pour ouvrir la commande." },
+            {
+              "instruction": "Cliquez sur le bouton 'Annuler la commande'.",
+              "note": "Ce bouton est disponible uniquement si la commande n’est pas encore expédiée."
+            },
+            { "instruction": "Confirmez l’annulation dans la fenêtre de confirmation." }
+          ]
+        },
+        {
+          "name": "Retourner un produit",
+          "intents": ["retour produit", "renvoyer commande", "faire un retour"],
+          "steps": [
+            { "instruction": "Accédez à la liste de vos commandes." },
+            { "instruction": "Cliquez sur la commande concernée pour ouvrir la page de détails." },
+            {
+              "instruction": "Sur la page de la commande, cliquez sur le bouton 'Retourner un article'.",
+              "note": "Le bouton se trouve dans la section 'Actions disponibles'."
+            },
+            { "instruction": "Un QR code de retour sera généré automatiquement." },
+            { "instruction": "Téléchargez ou imprimez le QR code et collez-le sur votre colis." },
+            { "instruction": "Déposez le colis dans le bureau de poste le plus proche." }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Adresses",
+      "url": "/espace-client/adresse",
+      "description": "Page permettant de gérer et modifier ses adresses de livraison et de facturation.",
+      "intents": ["adresses", "modifier adresse", "changer mon adresse", "nouvelle adresse"],
+      "procedures": [
+        {
+          "name": "Modifier une adresse",
+          "intents": ["changer adresse", "modifier adresse livraison", "corriger mon adresse"],
+          "steps": [
+            { "instruction": "Accédez à la page 'Adresses'." },
+            { "instruction": "Sélectionnez l’adresse que vous souhaitez modifier." },
+            { "instruction": "Cliquez sur 'Modifier'." },
+            { "instruction": "Mettez à jour vos informations et validez." }
+          ]
+        },
+        {
+          "name": "Ajouter une nouvelle adresse",
+          "intents": ["nouvelle adresse", "ajouter adresse", "enregistrer adresse"],
+          "steps": [
+            { "instruction": "Accédez à la page 'Adresses'." },
+            { "instruction": "Cliquez sur 'Ajouter une nouvelle adresse'." },
+            { "instruction": "Renseignez les champs demandés : nom, adresse, ville, code postal, pays." },
+            { "instruction": "Validez pour enregistrer votre nouvelle adresse." }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Factures",
+      "url": "/espace-client/factures",
+      "description": "Page listant toutes vos factures disponibles au téléchargement.",
+      "intents": ["factures", "mes factures", "télécharger facture", "reçu d’achat"],
+      "procedures": [
+        {
+          "name": "Télécharger une facture",
+          "intents": ["obtenir facture", "télécharger reçu", "facture pdf"],
+          "steps": [
+            { "instruction": "Accédez à la page 'Factures'." },
+            { "instruction": "Trouvez la commande dont vous voulez la facture." },
+            { "instruction": "Cliquez sur le bouton 'Télécharger la facture'." },
+            { "instruction": "Le fichier PDF sera téléchargé automatiquement." }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Moyens de paiement",
+      "url": "/espace-client/paiement",
+      "description": "Page permettant de gérer vos cartes bancaires et autres moyens de paiement enregistrés.",
+      "intents": ["paiement", "carte bancaire", "moyens de paiement", "modifier carte"],
+      "procedures": [
+        {
+          "name": "Ajouter un moyen de paiement",
+          "intents": ["ajouter carte", "nouveau moyen de paiement", "enregistrer carte"],
+          "steps": [
+            { "instruction": "Accédez à la page 'Moyens de paiement'." },
+            { "instruction": "Cliquez sur 'Ajouter un moyen de paiement'." },
+            { "instruction": "Renseignez les informations de votre carte ou compte bancaire." },
+            { "instruction": "Validez pour enregistrer le moyen de paiement." }
+          ]
+        },
+        {
+          "name": "Supprimer un moyen de paiement",
+          "intents": ["supprimer carte", "retirer moyen de paiement", "enlever carte"],
+          "steps": [
+            { "instruction": "Accédez à la page 'Moyens de paiement'." },
+            { "instruction": "Sélectionnez le moyen de paiement que vous souhaitez supprimer." },
+            { "instruction": "Cliquez sur 'Supprimer'." },
+            { "instruction": "Confirmez la suppression dans la fenêtre de confirmation." }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Mes Messages",
+      "url": "/espace-client/messages",
+      "description": "Page regroupant les messages et notifications échangés avec le service client.",
+      "intents": ["messages", "mes notifications", "historique de messages", "messagerie"],
+      "procedures": [
+        {
+          "name": "Lire un message",
+          "intents": ["ouvrir message", "voir notification", "lire mes messages"],
+          "steps": [
+            { "instruction": "Accédez à la page 'Mes Messages'." },
+            { "instruction": "Sélectionnez le message que vous souhaitez lire." },
+            { "instruction": "Cliquez pour l’ouvrir et afficher son contenu." }
+          ]
+        },
+        {
+          "name": "Répondre à un message",
+          "intents": ["répondre message", "envoyer réponse", "répondre support"],
+          "steps": [
+            { "instruction": "Accédez à la page 'Mes Messages'." },
+            { "instruction": "Sélectionnez le message auquel vous souhaitez répondre." },
+            { "instruction": "Cliquez sur 'Répondre'." },
+            { "instruction": "Rédigez votre message et cliquez sur 'Envoyer'." }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Support",
+      "url": "/espace-client/support",
+      "description": "Page permettant de contacter le service client et consulter la FAQ.",
+      "intents": ["support", "aide", "contact", "service client", "faq"],
+      "procedures": [
+        {
+          "name": "Contacter le support",
+          "intents": ["envoyer message support", "contacter service client", "poser une question"],
+          "steps": [
+            { "instruction": "Accédez à la page 'Support'." },
+            { "instruction": "Cliquez sur 'Envoyer un message'." },
+            { "instruction": "Sélectionnez le sujet de votre demande." },
+            { "instruction": "Rédigez votre message et cliquez sur 'Envoyer'." }
+          ]
+        },
+        {
+          "name": "Consulter la FAQ",
+          "intents": ["faq", "questions fréquentes", "trouver réponse"],
+          "steps": [
+            { "instruction": "Accédez à la page 'Support'." },
+            { "instruction": "Cliquez sur 'Consulter la FAQ'." },
+            { "instruction": "Parcourez les catégories ou utilisez la barre de recherche pour trouver votre réponse." }
+          ]
+        }
+      ]
+    }
+  ]
+  
