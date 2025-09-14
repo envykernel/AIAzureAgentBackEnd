@@ -41,6 +41,9 @@ public class ChatService : IChatService
         _messageRepository = messageRepository;
         _summaryRepository = summaryRepository;
         _azureAgentFactory = azureAgentFactory;
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"Getting agent by id: {azureConfiguration.SAVAgentId}");
+        Console.ResetColor();
         var agentWithClient =   _azureAgentFactory.GetAgentById(azureConfiguration.SAVAgentId).Result;
         persistentAgentsClient = agentWithClient.Client;
         masterAgent = agentWithClient.Agent;
@@ -364,8 +367,8 @@ public class ChatService : IChatService
             // Map the role from agent thread message to ThreadMessageOptions role
             var role = message.Role.ToString() switch
             {
-                "User" => Azure.AI.Agents.Persistent.MessageRole.User,
-                "Agent" => Azure.AI.Agents.Persistent.MessageRole.Agent,
+                "user" => Azure.AI.Agents.Persistent.MessageRole.User,
+                "assistant" => Azure.AI.Agents.Persistent.MessageRole.Agent,
                 _ => Azure.AI.Agents.Persistent.MessageRole.Agent
             };
             
