@@ -122,19 +122,22 @@ public class ChatService : IChatService
 
     public async Task<AgentResponse> GenerateAgentResponseAsync(IEnumerable<Message> conversation, string? agentThreadId = null)
     {
-        // Create ChatHistory from conversation store in mongo db
-        var chatHistory = CreateChatHistoryFromConversation(conversation);
-        var reducer = new ChatHistoryTruncationReducer(targetCount: 2);
-        // Reduce the chat history
-        var reducedMessages = await reducer.ReduceAsync(chatHistory);
+       conversation = conversation.Count() <= 2 
+            ? conversation 
+            : new[] { conversation.First()};
 
-
-  
+        Console.WriteLine($"Filtered messages count: {conversation.Count()}");
+        
         AzureAIAgentThread thread;
 
-        if(agentThreadId is not null)
+
+        if(!string.IsNullOrEmpty(agentThreadId))
         {
           var messages =  masterAgent.Client.Messages.GetMessages(threadId: agentThreadId, order:ListSortOrder.Ascending);
+          
+          // Create ThreadMessageOptions from agent thread messages
+          var threadMessages = CreateThreadMessageOptionsFromAgentMessages(messages);
+          
           foreach(var message in messages)
           {
             foreach(var messageContent in message.ContentItems)
@@ -150,28 +153,18 @@ public class ChatService : IChatService
                }
             }
           }
-        }
-   
 
-       if(reducedMessages is not null)
-        {
-         var reducedThreadMessages = ConvertChatHistoryToThreadMessageOptions(reducedMessages);
-         thread = new AzureAIAgentThread(client: masterAgent.Client, messages: reducedThreadMessages);
-
-         Console.WriteLine("We use reduced thread messages");
-         Console.WriteLine($"Reduced thread messages count: {reducedThreadMessages.Count}");
-
+         thread = new AzureAIAgentThread(client: masterAgent.Client, messages: threadMessages);
         }
         else
+       
         {
          // Create ThreadMessageOptions from conversation
-         var threadMessages = CreateThreadMessageOptionsFromConversation(conversation);
-         thread = new AzureAIAgentThread(client: masterAgent.Client, messages: threadMessages);
+         /*var threadMessages = CreateThreadMessageOptionsFromConversation(conversation);
          Console.WriteLine("We use full thread messages");
-         Console.WriteLine($"Full thread messages count: {threadMessages.Count}");
-
+         Console.WriteLine($"Full thread messages count: {threadMessages.Count}");*/
+         thread = new AzureAIAgentThread(client: masterAgent.Client);
         }
-
 
 
         try
@@ -199,14 +192,16 @@ public class ChatService : IChatService
                 return new AgentResponse
                 {
                     Content = response.Content ?? "No content in response.",
-                    TokenCount = tokenCount
+                    TokenCount = tokenCount,
+                    AgentThreadId = thread.Id ?? string.Empty
                 };
             }
             
             return new AgentResponse
             {
                 Content = "No response generated from agent.",
-                TokenCount = 0
+                TokenCount = 0,
+                AgentThreadId = thread.Id ?? string.Empty
             };
         }
         catch (Exception ex)
@@ -217,7 +212,8 @@ public class ChatService : IChatService
             return new AgentResponse
             {
                 Content = $"I encountered an error while processing your request: {ex.Message}",
-                TokenCount = 0
+                TokenCount = 0,
+                AgentThreadId = thread?.Id ?? string.Empty
             };
         }
         finally
@@ -337,7 +333,7 @@ public class ChatService : IChatService
             var role = message.Role.ToString() switch
             {
                 "User" => Azure.AI.Agents.Persistent.MessageRole.User,
-                "Assistant" => Azure.AI.Agents.Persistent.MessageRole.Agent,
+                "Agent" => Azure.AI.Agents.Persistent.MessageRole.Agent,
                 "System" => Azure.AI.Agents.Persistent.MessageRole.Agent,
                 _ => Azure.AI.Agents.Persistent.MessageRole.Agent
             };
@@ -347,6 +343,38 @@ public class ChatService : IChatService
         
         return threadMessages;
      }
+
+    private List<ThreadMessageOptions> CreateThreadMessageOptionsFromAgentMessages(IEnumerable<Azure.AI.Agents.Persistent.PersistentThreadMessage> messages)
+    {
+        var threadMessages = new List<ThreadMessageOptions>();
+        
+        foreach (var message in messages)
+        {
+            // Extract text content from message content items
+            string content = string.Empty;
+            foreach (var contentItem in message.ContentItems)
+            {
+                if (contentItem is MessageTextContent textContent)
+                {
+                    content = textContent.Text;
+                    break;
+                }
+            }
+            
+            // Map the role from agent thread message to ThreadMessageOptions role
+            var role = message.Role.ToString() switch
+            {
+                "User" => Azure.AI.Agents.Persistent.MessageRole.User,
+                "Agent" => Azure.AI.Agents.Persistent.MessageRole.Agent,
+                _ => Azure.AI.Agents.Persistent.MessageRole.Agent
+            };
+            
+            var threadMessage = new ThreadMessageOptions(role: role, content: content);
+            threadMessages.Add(threadMessage);
+        }
+        
+        return threadMessages;
+    }
        
 
 }

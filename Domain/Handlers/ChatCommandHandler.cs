@@ -44,6 +44,10 @@ public class ChatCommandHandler : IChatCommandHandler
         
         // Get conversation context and generate agent response
         var conversation = await _chatService.GetConversationAsync(session.Id);
+
+        //Keeponly the last message but always in a list
+        conversation = new[] { conversation.Last() };
+
         var agentThreadId = string.IsNullOrEmpty(request.AgentThreadId) ? _azureConfig.DefaultAgentThreadId : request.AgentThreadId;
         var agentResponse = await _chatService.GenerateAgentResponseAsync(conversation, agentThreadId);
 
@@ -57,7 +61,7 @@ public class ChatCommandHandler : IChatCommandHandler
             Timestamp = agentMessage.CreatedAt,
             TokenCount = agentResponse.TokenCount,
             IsNewSession = isNewSession,
-            
+            AgentThreadId = agentResponse.AgentThreadId,
             // Nouvelles propriétés pour la gestion des tokens et messages
             TotalMessageCount = finalSession.MessageCount,
             TotalTokenCount = finalSession.TokenCount,

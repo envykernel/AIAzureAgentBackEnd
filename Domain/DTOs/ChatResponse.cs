@@ -8,6 +8,7 @@ public class ChatResponse
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     public int TokenCount { get; set; } = 0;
     public bool IsNewSession { get; set; } = false;
+    public string AgentThreadId { get; set; } = string.Empty;
     
     // Nouvelles propriétés pour la gestion des tokens et messages
     public int TotalMessageCount { get; set; } = 0;

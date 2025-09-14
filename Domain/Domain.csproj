@@ -9,6 +9,7 @@
 
   <ItemGroup>
       <!-- Semantic Kernel -->
+       <PackageReference Include="Azure.AI.Agents.Persistent" Version="1.2.0-beta.2" />
        <PackageReference Include="Microsoft.SemanticKernel" Version="1.63.0" />
       <PackageReference Include="Microsoft.SemanticKernel.Agents.AzureAI" Version="1.63.0-preview" />
       <PackageReference Include="Microsoft.SemanticKernel.Agents.Core" Version="1.63.0" />

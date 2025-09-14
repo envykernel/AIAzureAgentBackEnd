@@ -19,6 +19,7 @@ public class AzureAgentFactory : IAzureAgentFactory
 
     public async Task<AgentWithClient> GetAgentById(string id)
     {
+        
         var credential = new DefaultAzureCredential();
         PersistentAgentsClient client = AzureAIAgent.CreateAgentsClient(_azureConfig.AgentEndpoint, credential);
         PersistentAgent definition = await client.Administration.GetAgentAsync(id);
