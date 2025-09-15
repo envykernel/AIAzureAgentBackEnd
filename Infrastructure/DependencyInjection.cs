@@ -2,8 +2,6 @@ using Domain.Interfaces;
 using Domain.Services;
 using Domain.Handlers;
 using Domain.Configuration;
-using Infrastructure.MongoDb;
-using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,31 +16,26 @@ public static class DependencyInjection
         // Configuration
         services.Configure<AzureConfiguration>(configuration.GetSection("Azure"));
         
-        // MongoDB Client
-        services.AddSingleton<MongoDbClient>();
-        
         // Kernel Factory
         services.AddSingleton<IKernelFactory, KernelFactory>();
         
         // Repositories
-        services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
-        services.AddScoped<IMessageRepository, MessageRepository>();
-        services.AddScoped<IConversationSummaryRepository, ConversationSummaryRepository>();
+        // No repositories needed - using Azure Agent Threads for conversation management
         
         // Azure Services
         services.AddScoped<IAzureAgentFactory, AzureAgentFactory>();
         
         // Domain Services
+        services.AddScoped<IConfigurationValidationService, ConfigurationValidationService>();
+        
         services.AddScoped<IChatService>(provider =>
         {
-            var sessionRepo = provider.GetRequiredService<IChatSessionRepository>();
-            var messageRepo = provider.GetRequiredService<IMessageRepository>();
-            var summaryRepo = provider.GetRequiredService<IConversationSummaryRepository>();
             var agentFactory = provider.GetRequiredService<IAzureAgentFactory>();
             var azureConfig = provider.GetRequiredService<IOptions<AzureConfiguration>>().Value;
             var kernelFactory = provider.GetRequiredService<IKernelFactory>();
+            var configValidationService = provider.GetRequiredService<IConfigurationValidationService>();
             
-            return new ChatService(sessionRepo, messageRepo, summaryRepo, agentFactory, azureConfig, kernelFactory);
+            return new ChatService(agentFactory, azureConfig, kernelFactory, configValidationService);
         });
         
         // Command Handlers

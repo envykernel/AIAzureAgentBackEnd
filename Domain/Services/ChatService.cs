@@ -1,13 +1,12 @@
-using Domain.Entities;
 using Domain.Interfaces;
 using Domain.Configuration;
 using Domain.DTOs;
+using Domain.Exceptions;
 using Microsoft.SemanticKernel.Agents.AzureAI;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Azure.AI.Agents.Persistent;
 using Microsoft.SemanticKernel.Agents;
-using System.Net.Mail;
 
 
 namespace Domain.Services;
@@ -17,64 +16,52 @@ public class ChatService : IChatService
     private const string USAGE_METADATA_KEY = "Usage";
     private const string TOTAL_TOKENS_PROPERTY = "TotalTokens";
     
-    private readonly IChatSessionRepository _sessionRepository;
-    private readonly IMessageRepository _messageRepository;
-    private readonly IConversationSummaryRepository _summaryRepository;
     private readonly IAzureAgentFactory _azureAgentFactory;
-    private readonly PersistentAgentsClient persistentAgentsClient;
     private readonly AzureAIAgent masterAgent;
     private readonly Kernel _kernel;
+    private readonly IConfigurationValidationService _configurationValidationService;
 
      private const string TranslatorName = "NumeroTranslator";
     private const string TranslatorInstructions = "Add one to latest user number and spell it in spanish without explanation.";
 
 
     public ChatService(
-        IChatSessionRepository sessionRepository,
-        IMessageRepository messageRepository,
-        IConversationSummaryRepository summaryRepository,
         IAzureAgentFactory azureAgentFactory,
         AzureConfiguration azureConfiguration,
-        IKernelFactory kernelFactory)
+        IKernelFactory kernelFactory,
+        IConfigurationValidationService configurationValidationService)
     {
-        _sessionRepository = sessionRepository;
-        _messageRepository = messageRepository;
-        _summaryRepository = summaryRepository;
         _azureAgentFactory = azureAgentFactory;
-        Console.ForegroundColor = ConsoleColor.Red;
+        _kernel = kernelFactory.CreateKernel();
+        _configurationValidationService = configurationValidationService;
+        
+        // Validate configuration before proceeding
+        _configurationValidationService.ValidateAzureConfiguration(azureConfiguration);
+        
+        // Initialize masterAgent with validated configuration
+        Console.ForegroundColor = ConsoleColor.Blue;
         Console.WriteLine($"Getting agent by id: {azureConfiguration.SAVAgentId}");
         Console.ResetColor();
-        var agentWithClient =   _azureAgentFactory.GetAgentById(azureConfiguration.SAVAgentId).Result;
-        persistentAgentsClient = agentWithClient.Client;
-        masterAgent = agentWithClient.Agent;
-        _kernel = kernelFactory.CreateKernel();
-    }
-
-    public async Task<ChatSession> CreateSessionAsync()
-    {
-        var session = new ChatSession
-        {
-            Id = Guid.NewGuid().ToString(),
-            CreatedAt = DateTime.UtcNow,
-            LastActivityAt = DateTime.UtcNow,
-            IsActive = true,
-            MessageCount = 0,
-            TokenCount = 0
-        };
-
-        await _sessionRepository.CreateAsync(session);
-        return session;
-    }
-
-    public async Task<AgentResponse> GenerateAgentResponseAsync(Message userMessage,string? agentThreadId = null)
-    {
-      
         
+        try
+        {
+            var agentWithClient = _azureAgentFactory.GetAgentById(azureConfiguration.SAVAgentId).Result;
+            masterAgent = agentWithClient.Agent;
+        }
+        catch (Exception ex)
+        {
+            throw new AzureConfigurationException($"Failed to initialize Azure Agent with ID '{azureConfiguration.SAVAgentId}': {ex.Message}", ex);
+        }
+    }
+
+    public async Task<AgentResponse> GenerateAgentResponseAsync(string userMessageContent, string? agentThreadId = null)
+    {
         AzureAIAgentThread thread;
 
 
         if(!string.IsNullOrEmpty(agentThreadId))
         {
+          // Get messages from azure agent thread
           var messages =  masterAgent.Client.Messages.GetMessages(threadId: agentThreadId, order:ListSortOrder.Ascending);
           
           // Create ThreadMessageOptions from agent thread messages
@@ -106,20 +93,10 @@ public class ChatService : IChatService
 
         try
         {
-            Console.WriteLine($"Generating agent response for message: {userMessage.Content}");
-           
+            Console.WriteLine($"Generating agent response for message: {userMessageContent}");
             
-            
-            await foreach (ChatMessageContent response in masterAgent.InvokeAsync(new ChatMessageContent(AuthorRole.User, userMessage.Content), thread))
+            await foreach (ChatMessageContent response in masterAgent.InvokeAsync(new ChatMessageContent(AuthorRole.User, userMessageContent), thread))
             {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("Thread id*: " + thread.Id);
-                Console.ResetColor();
-
-               var  getedThread = await masterAgent.Client.Threads.GetThreadAsync(thread.Id, CancellationToken.None);
-               Console.ForegroundColor = ConsoleColor.Red;
-               Console.WriteLine("Geted thread id: " + getedThread.Value.Id);
-               Console.ResetColor();
 
                 var tokenCount = ExtractTotalTokenCount(response);
                 
@@ -165,50 +142,6 @@ public class ChatService : IChatService
         return Math.Max(1, text.Length / 4);
     }
 
-    private ChatHistory CreateChatHistoryFromConversation(IEnumerable<Message> conversation)
-    {
-        var chatHistory = new ChatHistory();
-        
-        // Exclude the last user message to avoid duplication
-        var messagesToInclude = conversation.Take(conversation.Count() - 1);
-        
-        foreach (var message in messagesToInclude)
-        {
-            var authorRole = message.Role switch
-            {
-                Entities.MessageRole.User => AuthorRole.User,
-                Entities.MessageRole.Assistant => AuthorRole.Assistant,
-                Entities.MessageRole.System => AuthorRole.System,
-                _ => AuthorRole.User
-            };
-            
-            chatHistory.AddMessage(authorRole, message.Content);
-        }
-        
-        return chatHistory;
-    }
-
-    private List<ThreadMessageOptions> CreateThreadMessageOptionsFromConversation(IEnumerable<Message> conversation)
-    {
-        var threadMessages = new List<ThreadMessageOptions>();
-        
-        foreach (var message in conversation)
-        {
-            var role = message.Role switch
-            {
-                Entities.MessageRole.User => Azure.AI.Agents.Persistent.MessageRole.User,
-                Entities.MessageRole.Assistant => Azure.AI.Agents.Persistent.MessageRole.Agent,
-                Entities.MessageRole.System => Azure.AI.Agents.Persistent.MessageRole.User,
-                _ => Azure.AI.Agents.Persistent.MessageRole.User
-            };
-            
-            var threadMessage = new ThreadMessageOptions(role: role, content: message.Content);
-            threadMessages.Add(threadMessage);
-        }
-        
-        return threadMessages;
-    }
-
     private int ExtractTotalTokenCount(ChatMessageContent response)
     {
         if (response.Metadata?.TryGetValue(USAGE_METADATA_KEY, out var usageObj) == true)
@@ -217,7 +150,7 @@ public class ChatService : IChatService
             {
                 return chatUsage.TotalTokenCount;
             }
-            else if (usageObj is Azure.AI.Agents.Persistent.RunStepCompletionUsage runUsage)
+            else if (usageObj is RunStepCompletionUsage runUsage)
             {
                 var totalTokensProperty = runUsage.GetType().GetProperty(TOTAL_TOKENS_PROPERTY);
                 if (totalTokensProperty != null)

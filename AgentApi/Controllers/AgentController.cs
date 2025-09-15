@@ -1,6 +1,6 @@
 using Domain.DTOs;
-using Domain.Entities;
 using Domain.Interfaces;
+using Domain.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentApi.Controllers;
@@ -11,13 +11,11 @@ public class AgentController : ControllerBase
 {
     private readonly ILogger<AgentController> _logger;
     private readonly IChatCommandHandler _chatCommandHandler;
-    private readonly IChatService _chatService;
 
-    public AgentController(ILogger<AgentController> logger, IChatCommandHandler chatCommandHandler, IChatService chatService)
+    public AgentController(ILogger<AgentController> logger, IChatCommandHandler chatCommandHandler)
     {
         _logger = logger;
         _chatCommandHandler = chatCommandHandler;
-        _chatService = chatService;
     }
 
     [HttpPost("chat")]
@@ -29,8 +27,26 @@ public class AgentController : ControllerBase
             
             var response = await _chatCommandHandler.HandleAsync(request);
             
-            _logger.LogInformation("Chat response sent successfully. SessionId: {SessionId}", response.SessionId);
+            _logger.LogInformation("Chat response sent successfully. AgentThreadId: {AgentThreadId}", response.AgentThreadId);
             return Ok(response);
+        }
+        catch (AzureConfigurationException ex)
+        {
+            _logger.LogError(ex, "Azure configuration error in chat request");
+            return StatusCode(500, new { 
+                error = "Configuration Error", 
+                message = ex.Message,
+                details = "Please check your Azure configuration settings"
+            });
+        }
+        catch (ConfigurationException ex)
+        {
+            _logger.LogError(ex, "Configuration error in chat request");
+            return StatusCode(500, new { 
+                error = "Configuration Error", 
+                message = ex.Message,
+                details = "Please check your application configuration"
+            });
         }
         catch (InvalidOperationException ex)
         {

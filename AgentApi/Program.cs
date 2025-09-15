@@ -1,4 +1,11 @@
 using Infrastructure;
+using DotNetEnv;
+
+// Load .env file for development
+if (File.Exists("../.env"))
+{
+    Env.Load("../.env");
+}
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -2,12 +2,12 @@
 	"info": {
 		"_postman_id": "your-unique-id-here",
 		"name": "MultiAgentsBeta API",
-		"description": "API collection for testing MultiAgentsBeta chat functionality with Azure AI Agent integration",
+		"description": "API collection for testing MultiAgentsBeta chat functionality with Azure AI Agent integration. Features automatic agentThreadId management for seamless conversation continuity.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
-			"name": "Chat - New Session",
+			"name": "Chat - New Conversation",
 			"request": {
 				"method": "POST",
 				"header": [
@@ -18,7 +18,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"sessionId\": \"\",\n  \"message\": \"Hello, how can you help me today?\",\n  \"agentThreadId\": \"\"\n}"
+					"raw": "{\n  \"message\": \"Hello, how can you help me today?\",\n  \"agentThreadId\": null\n}"
 				},
 				"url": {
 					"raw": "{{baseUrl}}/api/agent/chat",
@@ -31,23 +31,23 @@
 						"chat"
 					]
 				},
-				"description": "Send a chat message and get agent response. Leave sessionId empty for new session. Optional agentThreadId can be provided to continue an existing Azure AI Agent thread. Returns comprehensive token management statistics including:\n- sessionId: Session identifier\n- message: Agent response content\n- role: Message role (Assistant)\n- timestamp: Response timestamp\n- tokenCount: Tokens used for this response\n- isNewSession: Whether this created a new session\n- totalMessageCount: Total messages in session\n- totalTokenCount: Total tokens used in session\n- maxTokens: Maximum tokens allowed (4000)\n- remainingTokens: Remaining token capacity\n- tokenUsagePercentage: Percentage of tokens used"
+				"description": "Start a new conversation with the AI agent. Leave agentThreadId empty or null for a new conversation. Returns:\n- message: Agent response content\n- role: Message role (Assistant)\n- timestamp: Response timestamp\n- tokenCount: Tokens used for this response\n- agentThreadId: Azure AI Agent Thread ID for continuing conversation\n- totalTokenCount: Total tokens used (currently 0)\n- maxTokens: Maximum tokens allowed (currently 0)\n- remainingTokens: Remaining token capacity (currently 0)\n- tokenUsagePercentage: Percentage of tokens used (currently 0)"
 			},
 			"event": [
 				{
 					"listen": "test",
 					"script": {
 						"exec": [
-							"// Extract session ID from response and store it in collection variable",
+							"// Extract agentThreadId from response and store it in collection variable",
 							"if (pm.response.code === 200) {",
 							"    const responseJson = pm.response.json();",
-							"    if (responseJson.sessionId) {",
-							"        pm.collectionVariables.set(\"sessionId\", responseJson.sessionId);",
-							"        console.log(\"Session ID stored:\", responseJson.sessionId);",
-							"        console.log(\"Token usage:\", responseJson.tokenUsagePercentage + \"%\");",
-							"        console.log(\"Remaining tokens:\", responseJson.remainingTokens);",
+							"    if (responseJson.agentThreadId) {",
+							"        pm.collectionVariables.set(\"agentThreadId\", responseJson.agentThreadId);",
+							"        console.log(\"Agent Thread ID stored:\", responseJson.agentThreadId);",
+							"        console.log(\"Agent response:\", responseJson.message);",
+							"        console.log(\"Token count:\", responseJson.tokenCount);",
 							"    } else {",
-							"        console.log(\"No session ID found in response\");",
+							"        console.log(\"No agentThreadId found in response\");",
 							"    }",
 							"} else {",
 							"    console.log(\"Request failed with status:\", pm.response.code);",
@@ -59,7 +59,7 @@
 			]
 		},
 		{
-			"name": "Chat - Continue Session",
+			"name": "Chat - Continue Conversation",
 			"request": {
 				"method": "POST",
 				"header": [
@@ -70,7 +70,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"Continue our conversation\",\n  \"agentThreadId\": \"\"\n}"
+					"raw": "{\n  \"message\": \"Continue our conversation\",\n  \"agentThreadId\": \"{{agentThreadId}}\"\n}"
 				},
 				"url": {
 					"raw": "{{baseUrl}}/api/agent/chat",
@@ -83,11 +83,30 @@
 						"chat"
 					]
 				},
-				"description": "Send a chat message using the session ID stored from the first Chat request. Optional agentThreadId can be provided to continue an existing Azure AI Agent thread. Returns comprehensive token management statistics including total message count, total token usage, remaining tokens, and usage percentage."
-			}
+				"description": "Continue the conversation using the agentThreadId from the previous response. The agentThreadId is automatically filled from the collection variable set by the first request. This maintains conversation context with Azure AI Agent."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Update agentThreadId if it changed in the response",
+							"if (pm.response.code === 200) {",
+							"    const responseJson = pm.response.json();",
+							"    if (responseJson.agentThreadId) {",
+							"        pm.collectionVariables.set(\"agentThreadId\", responseJson.agentThreadId);",
+							"        console.log(\"Agent Thread ID updated:\", responseJson.agentThreadId);",
+							"        console.log(\"Agent response:\", responseJson.message);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
 		},
 		{
-			"name": "Chat - With Agent Thread ID",
+			"name": "Chat - With Specific Thread ID",
 			"request": {
 				"method": "POST",
 				"header": [
@@ -98,7 +117,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"Continue with specific agent thread\",\n  \"agentThreadId\": \"thread_abc123xyz\"\n}"
+					"raw": "{\n  \"message\": \"Continue with specific agent thread\",\n  \"agentThreadId\": \"{{agentThreadId}}\"\n}"
 				},
 				"url": {
 					"raw": "{{baseUrl}}/api/agent/chat",
@@ -111,48 +130,7 @@
 						"chat"
 					]
 				},
-				"description": "Example of using a specific Azure AI Agent Thread ID to continue a conversation. The agentThreadId parameter allows you to maintain context with a specific Azure AI Agent thread, enabling more sophisticated multi-turn conversations with persistent context."
-			}
-		},
-		{
-			"name": "Get Session",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{baseUrl}}/api/agent/sessions/{{sessionId}}",
-					"host": [
-						"{{baseUrl}}"
-					],
-					"path": [
-						"api",
-						"agent",
-						"sessions",
-						"{{sessionId}}"
-					]
-				},
-				"description": "Get session details by session ID including:\n- Session metadata (ID, creation time, last activity)\n- Message count and token usage statistics\n- Activity status (active/inactive)\n- Token limits and remaining capacity"
-			}
-		},
-		{
-			"name": "Deactivate Session",
-			"request": {
-				"method": "POST",
-				"header": [],
-				"url": {
-					"raw": "{{baseUrl}}/api/agent/sessions/{{sessionId}}/deactivate",
-					"host": [
-						"{{baseUrl}}"
-					],
-					"path": [
-						"api",
-						"agent",
-						"sessions",
-						"{{sessionId}}",
-						"deactivate"
-					]
-				},
-				"description": "Deactivate a chat session to prevent further messages. This marks the session as inactive but preserves the conversation history."
+				"description": "Example of using the stored Azure AI Agent Thread ID to continue a conversation. The agentThreadId is automatically filled from the collection variable, enabling persistent multi-turn conversations with Azure AI Agent context."
 			}
 		},
 		{
@@ -214,16 +192,10 @@
 			"description": "Alternative base URL for the API"
 		},
 		{
-			"key": "sessionId",
-			"value": "session_123456",
-			"type": "string",
-			"description": "Session ID automatically stored from the first Chat request"
-		},
-		{
 			"key": "agentThreadId",
 			"value": "",
 			"type": "string",
-			"description": "Azure AI Agent Thread ID for maintaining conversation context"
+			"description": "Azure AI Agent Thread ID automatically stored from chat responses for maintaining conversation context"
 		}
 	]
 }
