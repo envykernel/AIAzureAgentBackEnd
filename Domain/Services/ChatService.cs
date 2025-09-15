@@ -7,6 +7,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Azure.AI.Agents.Persistent;
 using Microsoft.SemanticKernel.Agents;
+using System.Data.Common;
 
 
 namespace Domain.Services;
@@ -82,8 +83,9 @@ public class ChatService : IChatService
                }
             }
           }
-
-         thread = new AzureAIAgentThread(client: masterAgent.Client, messages: threadMessages);
+        
+        thread = new AzureAIAgentThread(client: masterAgent.Client,id: agentThreadId);
+        
         }
         else
         {
