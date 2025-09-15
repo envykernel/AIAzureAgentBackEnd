@@ -18,16 +18,17 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add CORS policy to allow all websites
+// Add CORS policy with configurable origins
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowConfiguredOrigins", policy =>
     {
-        policy.AllowAnyOrigin()
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "http://localhost:5173" };
+        
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
-              .AllowAnyMethod();
-        // Note: AllowCredentials() cannot be used with AllowAnyOrigin()
-        // If you need credentials, you must specify specific origins
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -46,7 +47,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // Enable CORS - must be called before UseRouting and UseEndpoints
-app.UseCors("AllowAll");
+app.UseCors("AllowConfiguredOrigins");
 
 app.MapControllers();
 
