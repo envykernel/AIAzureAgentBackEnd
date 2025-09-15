@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "your-unique-id-here",
-		"name": "MultiAgentsBeta API",
+		"name": "MultiAgentsBeta API Azure",
 		"description": "API collection for testing MultiAgentsBeta chat functionality with Azure AI Agent integration. Features automatic agentThreadId management for seamless conversation continuity.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
@@ -31,7 +31,7 @@
 						"chat"
 					]
 				},
-				"description": "Start a new conversation with the AI agent. Leave agentThreadId empty or null for a new conversation. Returns:\n- message: Agent response content\n- role: Message role (Assistant)\n- timestamp: Response timestamp\n- tokenCount: Tokens used for this response\n- agentThreadId: Azure AI Agent Thread ID for continuing conversation\n- totalTokenCount: Total tokens used (currently 0)\n- maxTokens: Maximum tokens allowed (currently 0)\n- remainingTokens: Remaining token capacity (currently 0)\n- tokenUsagePercentage: Percentage of tokens used (currently 0)"
+				"description": "Start a new conversation with the AI agent. Leave agentThreadId empty or null for a new conversation. Returns:\n- message: Agent response content\n- role: Message role (Assistant)\n- timestamp: Response timestamp\n- tokenCount: Tokens used for this response\n- totalTokenCount: Accumulated tokens for this session\n- remainingTokens: Tokens remaining before hitting limit\n- tokenUsagePercentage: Percentage of token limit used\n- agentThreadId: Azure AI Agent Thread ID for continuing conversation"
 			},
 			"event": [
 				{
@@ -46,6 +46,9 @@
 							"        console.log(\"Agent Thread ID stored:\", responseJson.agentThreadId);",
 							"        console.log(\"Agent response:\", responseJson.message);",
 							"        console.log(\"Token count:\", responseJson.tokenCount);",
+							"        console.log(\"Total tokens:\", responseJson.totalTokenCount);",
+							"        console.log(\"Remaining tokens:\", responseJson.remainingTokens);",
+							"        console.log(\"Token usage %:\", responseJson.tokenUsagePercentage + \"%\");",
 							"    } else {",
 							"        console.log(\"No agentThreadId found in response\");",
 							"    }",
@@ -97,6 +100,10 @@
 							"        pm.collectionVariables.set(\"agentThreadId\", responseJson.agentThreadId);",
 							"        console.log(\"Agent Thread ID updated:\", responseJson.agentThreadId);",
 							"        console.log(\"Agent response:\", responseJson.message);",
+							"        console.log(\"Token count:\", responseJson.tokenCount);",
+							"        console.log(\"Total tokens:\", responseJson.totalTokenCount);",
+							"        console.log(\"Remaining tokens:\", responseJson.remainingTokens);",
+							"        console.log(\"Token usage %:\", responseJson.tokenUsagePercentage + \"%\");",
 							"    }",
 							"}"
 						],
@@ -132,6 +139,90 @@
 				},
 				"description": "Example of using the stored Azure AI Agent Thread ID to continue a conversation. The agentThreadId is automatically filled from the collection variable, enabling persistent multi-turn conversations with Azure AI Agent context."
 			}
+		},
+		{
+			"name": "Get Token Session",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/agent/tokens/{{agentThreadId}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"agent",
+						"tokens",
+						"{{agentThreadId}}"
+					]
+				},
+				"description": "Get current token session information for a specific agent thread without making a new chat request. Returns:\n- sessionId: Session identifier\n- totalTokenCount: Accumulated tokens for this session\n- maxTokensPerSession: Maximum tokens allowed per session\n- remainingTokens: Tokens remaining before hitting limit\n- tokenUsagePercentage: Percentage of token limit used\n- lastUpdated: Timestamp of last update\n- isTokenLimitExceeded: Boolean indicating if limit is exceeded\n- isApproachingTokenLimit: Boolean indicating if approaching limit (90% threshold)"
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const responseJson = pm.response.json();",
+							"    console.log(\"Token Session Info:\");",
+							"    console.log(\"Session ID:\", responseJson.sessionId);",
+							"    console.log(\"Total tokens:\", responseJson.totalTokenCount);",
+							"    console.log(\"Max tokens:\", responseJson.maxTokensPerSession);",
+							"    console.log(\"Remaining tokens:\", responseJson.remainingTokens);",
+							"    console.log(\"Usage percentage:\", responseJson.tokenUsagePercentage + \"%\");",
+							"    console.log(\"Limit exceeded:\", responseJson.isTokenLimitExceeded);",
+							"    console.log(\"Approaching limit:\", responseJson.isApproachingTokenLimit);",
+							"} else if (pm.response.code === 404) {",
+							"    console.log(\"No token session found for this thread ID\");",
+							"} else {",
+							"    console.log(\"Request failed with status:\", pm.response.code);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
+		},
+		{
+			"name": "Reset Token Session",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/agent/tokens/{{agentThreadId}}/reset",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"agent",
+						"tokens",
+						"{{agentThreadId}}",
+						"reset"
+					]
+				},
+				"description": "Reset token usage for a specific agent thread. This will clear the accumulated token count for the session and start fresh. Useful when you want to reset token tracking without losing the conversation context."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const responseJson = pm.response.json();",
+							"    console.log(\"Token session reset successfully:\");",
+							"    console.log(\"Message:\", responseJson.message);",
+							"    console.log(\"Agent Thread ID:\", responseJson.agentThreadId);",
+							"} else {",
+							"    console.log(\"Request failed with status:\", pm.response.code);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
 		},
 		{
 			"name": "Test CORS",

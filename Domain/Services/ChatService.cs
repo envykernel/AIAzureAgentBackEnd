@@ -8,6 +8,7 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Azure.AI.Agents.Persistent;
 using Microsoft.SemanticKernel.Agents;
 using System.Data.Common;
+using Domain.Services;
 
 
 namespace Domain.Services;
@@ -21,6 +22,8 @@ public class ChatService : IChatService
     private readonly AzureAIAgent masterAgent;
     private readonly Kernel _kernel;
     private readonly IConfigurationValidationService _configurationValidationService;
+    private readonly AzureConfiguration _azureConfiguration;
+    private readonly ITokenSessionService _tokenSessionService;
 
      private const string TranslatorName = "NumeroTranslator";
     private const string TranslatorInstructions = "Add one to latest user number and spell it in spanish without explanation.";
@@ -30,11 +33,14 @@ public class ChatService : IChatService
         IAzureAgentFactory azureAgentFactory,
         AzureConfiguration azureConfiguration,
         IKernelFactory kernelFactory,
-        IConfigurationValidationService configurationValidationService)
+        IConfigurationValidationService configurationValidationService,
+        ITokenSessionService tokenSessionService)
     {
         _azureAgentFactory = azureAgentFactory;
         _kernel = kernelFactory.CreateKernel();
         _configurationValidationService = configurationValidationService;
+        _azureConfiguration = azureConfiguration;
+        _tokenSessionService = tokenSessionService;
         
         // Validate configuration before proceeding
         _configurationValidationService.ValidateAzureConfiguration(azureConfiguration);
@@ -57,41 +63,7 @@ public class ChatService : IChatService
 
     public async Task<AgentResponse> GenerateAgentResponseAsync(string userMessageContent, string? agentThreadId = null)
     {
-        AzureAIAgentThread thread;
-
-
-        if(!string.IsNullOrEmpty(agentThreadId))
-        {
-          // Get messages from azure agent thread
-          var messages =  masterAgent.Client.Messages.GetMessages(threadId: agentThreadId, order:ListSortOrder.Ascending);
-          
-          // Create ThreadMessageOptions from agent thread messages
-          var threadMessages = CreateThreadMessageOptionsFromAgentMessages(messages);
-          
-          foreach(var message in messages)
-          {
-            foreach(var messageContent in message.ContentItems)
-            {
-               switch(messageContent)
-               {
-                case MessageTextContent textTem:
-                    Console.ForegroundColor = ConsoleColor.Blue;
-                    Console.WriteLine($"[{message.Role}] {textTem.Text}");
-                    Console.ResetColor();
-                    break;
-                
-               }
-            }
-          }
-        
-        thread = new AzureAIAgentThread(client: masterAgent.Client,id: agentThreadId);
-        
-        }
-        else
-        {
-         thread = new AzureAIAgentThread(client: masterAgent.Client);
-        }
-
+        var thread = CreateOrGetThread(agentThreadId);
 
         try
         {
@@ -99,35 +71,86 @@ public class ChatService : IChatService
             
             await foreach (ChatMessageContent response in masterAgent.InvokeAsync(new ChatMessageContent(AuthorRole.User, userMessageContent), thread))
             {
-
+                // Get the thread ID from the Azure thread after it's been used
+                var sessionId = thread.Id;
+                if (string.IsNullOrEmpty(sessionId))
+                {
+                    throw new InvalidOperationException("Azure Agent Thread did not provide a valid thread ID after invocation");
+                }
+                
                 var tokenCount = ExtractTotalTokenCount(response);
                 
+                // Check token limit after we know the actual token count
+                _tokenSessionService.CheckTokenLimit(sessionId, tokenCount, _azureConfiguration.TokenLimits.AutoResetOnLimitExceeded);
+                
+                // Update token session with new tokens
+                _tokenSessionService.UpdateSession(sessionId, tokenCount);
+                var tokenSession = _tokenSessionService.GetOrCreateSession(sessionId);
+                
                 Console.WriteLine($"Agent response received: {response.Content}");
+                Console.WriteLine($"Token count: {tokenCount}, Total: {tokenSession.TotalTokenCount}, Remaining: {tokenSession.RemainingTokens}, Usage: {tokenSession.TokenUsagePercentage:F2}%");
+                
                 return new AgentResponse
                 {
                     Content = response.Content ?? "No content in response.",
                     TokenCount = tokenCount,
-                    AgentThreadId = thread.Id ?? string.Empty
+                    TotalTokenCount = tokenSession.TotalTokenCount,
+                    RemainingTokens = tokenSession.RemainingTokens,
+                    TokenUsagePercentage = tokenSession.TokenUsagePercentage,
+                    AgentThreadId = sessionId
                 };
             }
+            
+            // Handle case where no response is generated
+            var fallbackSessionId = thread.Id;
+            if (string.IsNullOrEmpty(fallbackSessionId))
+            {
+                throw new InvalidOperationException("Azure Agent Thread did not provide a valid thread ID after invocation");
+            }
+            
+            var fallbackTokenSession = _tokenSessionService.GetOrCreateSession(fallbackSessionId);
             
             return new AgentResponse
             {
                 Content = "No response generated from agent.",
                 TokenCount = 0,
-                AgentThreadId = thread.Id ?? string.Empty
+                TotalTokenCount = fallbackTokenSession.TotalTokenCount,
+                RemainingTokens = fallbackTokenSession.RemainingTokens,
+                TokenUsagePercentage = fallbackTokenSession.TokenUsagePercentage,
+                AgentThreadId = fallbackSessionId
             };
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error in GenerateAgentResponseAsync: {ex.Message}");
             Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            
             // Log the exception in production
+            var errorSessionId = thread?.Id;
+            if (string.IsNullOrEmpty(errorSessionId))
+            {
+                // If we can't get a thread ID, we can't track tokens
+                return new AgentResponse
+                {
+                    Content = $"I encountered an error while processing your request: {ex.Message}",
+                    TokenCount = 0,
+                    TotalTokenCount = 0,
+                    RemainingTokens = 0,
+                    TokenUsagePercentage = 0.0,
+                    AgentThreadId = string.Empty
+                };
+            }
+            
+            var errorTokenSession = _tokenSessionService.GetOrCreateSession(errorSessionId);
+            
             return new AgentResponse
             {
                 Content = $"I encountered an error while processing your request: {ex.Message}",
                 TokenCount = 0,
-                AgentThreadId = thread?.Id ?? string.Empty
+                TotalTokenCount = errorTokenSession.TotalTokenCount,
+                RemainingTokens = errorTokenSession.RemainingTokens,
+                TokenUsagePercentage = errorTokenSession.TokenUsagePercentage,
+                AgentThreadId = errorSessionId
             };
         }
         finally
@@ -136,6 +159,31 @@ public class ChatService : IChatService
         }
     }
 
+    /// <summary>
+    /// Creates a new Azure Agent Thread or retrieves an existing one based on the provided thread ID
+    /// </summary>
+    /// <param name="agentThreadId">Optional existing thread ID. If null, creates a new thread</param>
+    /// <returns>AzureAIAgentThread instance</returns>
+    /// <exception cref="ArgumentException">Thrown when thread ID format is invalid</exception>
+    private AzureAIAgentThread CreateOrGetThread(string? agentThreadId)
+    {
+        if (!string.IsNullOrEmpty(agentThreadId))
+        {
+            // Validate thread ID format
+            if (!agentThreadId.StartsWith("thread_"))
+            {
+                throw new ArgumentException($"Invalid thread ID format. Expected format: 'thread_xxxxx', but received: '{agentThreadId}'");
+            }
+            
+            // Create thread with existing ID
+            return new AzureAIAgentThread(client: masterAgent.Client, id: agentThreadId);
+        }
+        else
+        {
+            // Create new thread
+            return new AzureAIAgentThread(client: masterAgent.Client);
+        }
+    }
 
     public int EstimateTokenCount(string text)
     {
@@ -143,6 +191,7 @@ public class ChatService : IChatService
         // In production, use a proper tokenizer
         return Math.Max(1, text.Length / 4);
     }
+
 
     private int ExtractTotalTokenCount(ChatMessageContent response)
     {
@@ -172,70 +221,4 @@ public class ChatService : IChatService
         
         return 0;
     }
-
-     private ChatCompletionAgent CreateTruncatingAgent(int reducerMessageCount, int reducerThresholdCount, bool useChatClient) 
-     {
-        return new()
-        {
-            Name = TranslatorName,
-            Instructions = TranslatorInstructions,
-            Kernel = _kernel,
-            HistoryReducer = new ChatHistoryTruncationReducer(reducerMessageCount, reducerThresholdCount),
-        };
-     }
-
-     private List<ThreadMessageOptions> ConvertChatHistoryToThreadMessageOptions(IEnumerable<ChatMessageContent> messages)
-     {
-        var threadMessages = new List<ThreadMessageOptions>();
-        
-        foreach (var message in messages)
-        {
-            Console.WriteLine($"Message: {message.Content} - Role: {message.Role}");
-            var role = message.Role.ToString() switch
-            {
-                "User" => Azure.AI.Agents.Persistent.MessageRole.User,
-                "Agent" => Azure.AI.Agents.Persistent.MessageRole.Agent,
-                "System" => Azure.AI.Agents.Persistent.MessageRole.Agent,
-                _ => Azure.AI.Agents.Persistent.MessageRole.Agent
-            };
-            
-            threadMessages.Add(new ThreadMessageOptions(role: role, content: message.Content));
-        }
-        
-        return threadMessages;
-     }
-
-    private List<ThreadMessageOptions> CreateThreadMessageOptionsFromAgentMessages(IEnumerable<Azure.AI.Agents.Persistent.PersistentThreadMessage> messages)
-    {
-        var threadMessages = new List<ThreadMessageOptions>();
-        
-        foreach (var message in messages)
-        {
-            // Extract text content from message content items
-            string content = string.Empty;
-            foreach (var contentItem in message.ContentItems)
-            {
-                if (contentItem is MessageTextContent textContent)
-                {
-                    content = textContent.Text;
-                    break;
-                }
-            }
-            
-            // Map the role from agent thread message to ThreadMessageOptions role
-            var role = message.Role.ToString() switch
-            {
-                "user" => Azure.AI.Agents.Persistent.MessageRole.User,
-                "assistant" => Azure.AI.Agents.Persistent.MessageRole.Agent,
-                _ => Azure.AI.Agents.Persistent.MessageRole.Agent
-            };
-            
-            var threadMessage = new ThreadMessageOptions(role: role, content: content);
-            threadMessages.Add(threadMessage);
-        }
-        
-        return threadMessages;
-    }
-       
-
 }

@@ -29,11 +29,11 @@ public class ChatCommandHandler : IChatCommandHandler
             Timestamp = DateTime.UtcNow,
             TokenCount = agentResponse.TokenCount,
             AgentThreadId = agentResponse.AgentThreadId,
-            // Token usage properties set to 0
-            TotalTokenCount = 0,
-            MaxTokens = 0,
-            RemainingTokens = 0,
-            TokenUsagePercentage = 0.0
+            // Use actual token usage values from agent response
+            TotalTokenCount = agentResponse.TotalTokenCount,
+            MaxTokens = _azureConfig.TokenLimits.MaxTokensPerSession, // Use configured max tokens
+            RemainingTokens = agentResponse.RemainingTokens,
+            TokenUsagePercentage = agentResponse.TokenUsagePercentage
         };
     }
 }

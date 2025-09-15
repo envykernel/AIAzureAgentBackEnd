@@ -28,14 +28,24 @@ public static class DependencyInjection
         // Domain Services
         services.AddScoped<IConfigurationValidationService, ConfigurationValidationService>();
         
+        // Token Session Service (Singleton to maintain state across requests)
+        services.AddSingleton<ITokenSessionService>(provider =>
+        {
+            var azureConfig = provider.GetRequiredService<IOptions<AzureConfiguration>>().Value;
+            return new TokenSessionService(
+                azureConfig.TokenLimits.MaxTokensPerSession, 
+                azureConfig.TokenLimits.AutoResetOnLimitExceeded);
+        });
+        
         services.AddScoped<IChatService>(provider =>
         {
             var agentFactory = provider.GetRequiredService<IAzureAgentFactory>();
             var azureConfig = provider.GetRequiredService<IOptions<AzureConfiguration>>().Value;
             var kernelFactory = provider.GetRequiredService<IKernelFactory>();
             var configValidationService = provider.GetRequiredService<IConfigurationValidationService>();
+            var tokenSessionService = provider.GetRequiredService<ITokenSessionService>();
             
-            return new ChatService(agentFactory, azureConfig, kernelFactory, configValidationService);
+            return new ChatService(agentFactory, azureConfig, kernelFactory, configValidationService, tokenSessionService);
         });
         
         // Command Handlers

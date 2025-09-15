@@ -21,3 +21,20 @@ public class AzureConfigurationException : ConfigurationException
     {
     }
 }
+
+public class TokenLimitExceededException : Exception
+{
+    public string AgentThreadId { get; }
+    public int CurrentTokenCount { get; }
+    public int MaxTokens { get; }
+    public bool ShouldResetSession { get; }
+
+    public TokenLimitExceededException(string agentThreadId, int currentTokenCount, int maxTokens, bool shouldResetSession = false)
+        : base($"Token limit exceeded for session '{agentThreadId}'. Current: {currentTokenCount}, Max: {maxTokens}. Please create a new session.")
+    {
+        AgentThreadId = agentThreadId;
+        CurrentTokenCount = currentTokenCount;
+        MaxTokens = maxTokens;
+        ShouldResetSession = shouldResetSession;
+    }
+}

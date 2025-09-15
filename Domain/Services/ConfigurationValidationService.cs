@@ -62,6 +62,24 @@ public class ConfigurationValidationService : IConfigurationValidationService
             }
         }
 
+        // Validate Token configuration
+        if (configuration.TokenLimits == null)
+        {
+            errors.Add("TokenLimits configuration is required");
+        }
+        else
+        {
+            if (configuration.TokenLimits.MaxTokensPerSession <= 0)
+            {
+                errors.Add("MaxTokensPerSession must be greater than 0");
+            }
+
+            if (configuration.TokenLimits.WarningThresholdPercentage < 0 || configuration.TokenLimits.WarningThresholdPercentage > 100)
+            {
+                errors.Add("WarningThresholdPercentage must be between 0 and 100");
+            }
+        }
+
         if (errors.Any())
         {
             var errorMessage = $"Azure configuration validation failed: {string.Join(", ", errors)}";
