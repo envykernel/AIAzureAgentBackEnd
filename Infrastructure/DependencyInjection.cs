@@ -33,8 +33,10 @@ public static class DependencyInjection
         {
             var azureConfig = provider.GetRequiredService<IOptions<AzureConfiguration>>().Value;
             return new TokenSessionService(
-                azureConfig.TokenLimits.MaxTokensPerSession, 
-                azureConfig.TokenLimits.AutoResetOnLimitExceeded);
+                azureConfig.TokenLimits.AdvertisedMaxTokensPerSession,
+                azureConfig.TokenLimits.RealMaxTokensPerSession,
+                azureConfig.TokenLimits.AutoResetOnLimitExceeded,
+                azureConfig.TokenLimits.WarningThresholdPercentage);
         });
         
         services.AddScoped<IChatService>(provider =>

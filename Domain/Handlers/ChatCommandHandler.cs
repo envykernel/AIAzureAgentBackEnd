@@ -27,13 +27,29 @@ public class ChatCommandHandler : IChatCommandHandler
             Message = agentResponse.Content,
             Role = "Assistant",
             Timestamp = DateTime.UtcNow,
-            TokenCount = agentResponse.TokenCount,
-            AgentThreadId = agentResponse.AgentThreadId,
-            // Use actual token usage values from agent response
-            TotalTokenCount = agentResponse.TotalTokenCount,
-            MaxTokens = _azureConfig.TokenLimits.MaxTokensPerSession, // Use configured max tokens
-            RemainingTokens = agentResponse.RemainingTokens,
-            TokenUsagePercentage = agentResponse.TokenUsagePercentage
+            TokenUsage = new TokenUsageInfo
+            {
+                TokenCount = agentResponse.TokenUsage.TokenCount,
+                TotalTokenCount = agentResponse.TokenUsage.TotalTokenCount,
+                MaxTokens = _azureConfig.TokenLimits.AdvertisedMaxTokensPerSession, // Use advertised max tokens for display
+                RemainingTokens = agentResponse.TokenUsage.RemainingTokens,
+                TokenUsagePercentage = agentResponse.TokenUsage.TokenUsagePercentage
+            },
+            Session = new SessionInfo
+            {
+                AgentThreadId = agentResponse.Session.AgentThreadId,
+                IsSessionClosed = agentResponse.Session.IsSessionClosed,
+                SessionMessage = agentResponse.Session.SessionMessage
+            },
+            // Error handling properties
+            IsError = agentResponse.IsError,
+            ErrorType = agentResponse.ErrorType,
+            ErrorMessage = agentResponse.ErrorMessage
         };
+    }
+
+    public async Task<bool> DeleteThreadAsync(string agentThreadId)
+    {
+        return await _chatService.DeleteThreadAsync(agentThreadId);
     }
 }

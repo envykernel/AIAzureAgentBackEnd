@@ -81,7 +81,15 @@ public class ChatService : IChatService
                 var tokenCount = ExtractTotalTokenCount(response);
                 
                 // Check token limit after we know the actual token count
-                _tokenSessionService.CheckTokenLimit(sessionId, tokenCount, _azureConfiguration.TokenLimits.AutoResetOnLimitExceeded);
+                try
+                {
+                    _tokenSessionService.CheckTokenLimit(sessionId, tokenCount, _azureConfiguration.TokenLimits.AutoResetOnLimitExceeded);
+                }
+                catch (TokenLimitExceededException)
+                {
+                    // This request would exceed the real limit, but we continue processing
+                    // The real limit check is handled by TokenSessionService
+                }
                 
                 // Update token session with new tokens
                 _tokenSessionService.UpdateSession(sessionId, tokenCount);
@@ -90,14 +98,37 @@ public class ChatService : IChatService
                 Console.WriteLine($"Agent response received: {response.Content}");
                 Console.WriteLine($"Token count: {tokenCount}, Total: {tokenSession.TotalTokenCount}, Remaining: {tokenSession.RemainingTokens}, Usage: {tokenSession.TokenUsagePercentage:F2}%");
                 
+                // Generate session closure message if advertised limit is exceeded
+                string sessionMessage = string.Empty;
+                bool isSessionClosed = false;
+                
+                // Check if we've exceeded the advertised limit (what users see)
+                if (tokenSession.TotalTokenCount > _azureConfiguration.TokenLimits.AdvertisedMaxTokensPerSession)
+                {
+                    // This response exceeds the advertised limit, so we close the session gracefully
+                    sessionMessage = $"Session closed: You have used {tokenSession.TokenUsagePercentage:F1}% of your token limit ({tokenSession.TotalTokenCount}/{tokenSession.MaxTokens}). Please create a new session for future requests.";
+                    isSessionClosed = true;
+                    // Block the session for future requests
+                    _tokenSessionService.BlockSession(sessionId);
+                }
+                
                 return new AgentResponse
                 {
                     Content = response.Content ?? "No content in response.",
-                    TokenCount = tokenCount,
-                    TotalTokenCount = tokenSession.TotalTokenCount,
-                    RemainingTokens = tokenSession.RemainingTokens,
-                    TokenUsagePercentage = tokenSession.TokenUsagePercentage,
-                    AgentThreadId = sessionId
+                    TokenUsage = new TokenUsageInfo
+                    {
+                        TokenCount = tokenCount,
+                        TotalTokenCount = tokenSession.TotalTokenCount,
+                        RemainingTokens = tokenSession.RemainingTokens,
+                        TokenUsagePercentage = tokenSession.TokenUsagePercentage,
+                        MaxTokens = tokenSession.MaxTokens
+                    },
+                    Session = new SessionInfo
+                    {
+                        AgentThreadId = sessionId,
+                        IsSessionClosed = isSessionClosed,
+                        SessionMessage = sessionMessage
+                    }
                 };
             }
             
@@ -113,11 +144,20 @@ public class ChatService : IChatService
             return new AgentResponse
             {
                 Content = "No response generated from agent.",
-                TokenCount = 0,
-                TotalTokenCount = fallbackTokenSession.TotalTokenCount,
-                RemainingTokens = fallbackTokenSession.RemainingTokens,
-                TokenUsagePercentage = fallbackTokenSession.TokenUsagePercentage,
-                AgentThreadId = fallbackSessionId
+                TokenUsage = new TokenUsageInfo
+                {
+                    TokenCount = 0,
+                    TotalTokenCount = fallbackTokenSession.TotalTokenCount,
+                    RemainingTokens = fallbackTokenSession.RemainingTokens,
+                    TokenUsagePercentage = fallbackTokenSession.TokenUsagePercentage,
+                    MaxTokens = fallbackTokenSession.MaxTokens
+                },
+                Session = new SessionInfo
+                {
+                    AgentThreadId = fallbackSessionId,
+                    IsSessionClosed = false,
+                    SessionMessage = string.Empty
+                }
             };
         }
         catch (Exception ex)
@@ -133,11 +173,8 @@ public class ChatService : IChatService
                 return new AgentResponse
                 {
                     Content = $"I encountered an error while processing your request: {ex.Message}",
-                    TokenCount = 0,
-                    TotalTokenCount = 0,
-                    RemainingTokens = 0,
-                    TokenUsagePercentage = 0.0,
-                    AgentThreadId = string.Empty
+                    TokenUsage = new TokenUsageInfo(),
+                    Session = new SessionInfo()
                 };
             }
             
@@ -146,11 +183,20 @@ public class ChatService : IChatService
             return new AgentResponse
             {
                 Content = $"I encountered an error while processing your request: {ex.Message}",
-                TokenCount = 0,
-                TotalTokenCount = errorTokenSession.TotalTokenCount,
-                RemainingTokens = errorTokenSession.RemainingTokens,
-                TokenUsagePercentage = errorTokenSession.TokenUsagePercentage,
-                AgentThreadId = errorSessionId
+                TokenUsage = new TokenUsageInfo
+                {
+                    TokenCount = 0,
+                    TotalTokenCount = errorTokenSession.TotalTokenCount,
+                    RemainingTokens = errorTokenSession.RemainingTokens,
+                    TokenUsagePercentage = errorTokenSession.TokenUsagePercentage,
+                    MaxTokens = errorTokenSession.MaxTokens
+                },
+                Session = new SessionInfo
+                {
+                    AgentThreadId = errorSessionId,
+                    IsSessionClosed = false,
+                    SessionMessage = string.Empty
+                }
             };
         }
         finally
@@ -185,12 +231,6 @@ public class ChatService : IChatService
         }
     }
 
-    public int EstimateTokenCount(string text)
-    {
-        // Simple token estimation (roughly 4 characters per token)
-        // In production, use a proper tokenizer
-        return Math.Max(1, text.Length / 4);
-    }
 
 
     private int ExtractTotalTokenCount(ChatMessageContent response)
@@ -220,5 +260,35 @@ public class ChatService : IChatService
         }
         
         return 0;
+    }
+
+    public async Task<bool> DeleteThreadAsync(string agentThreadId)
+    {
+        try
+        {
+            // Validate thread ID format
+            if (!agentThreadId.StartsWith("thread_"))
+            {
+                throw new ArgumentException($"Invalid thread ID format. Expected format: 'thread_xxxxx', but received: '{agentThreadId}'");
+            }
+
+            // Create thread instance using the provided ID
+            var thread = new AzureAIAgentThread(client: masterAgent.Client, id: agentThreadId);
+            
+            // Delete the thread
+            await thread.DeleteAsync();
+            
+            // Also reset the token session for this thread
+            _tokenSessionService.ResetSession(agentThreadId);
+            
+            Console.WriteLine($"Thread {agentThreadId} deleted successfully");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting thread {agentThreadId}: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            return false;
+        }
     }
 }

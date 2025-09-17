@@ -27,7 +27,25 @@ public class AgentController : ControllerBase
             
             var response = await _chatCommandHandler.HandleAsync(request);
             
-            _logger.LogInformation("Chat response sent successfully. AgentThreadId: {AgentThreadId}", response.AgentThreadId);
+            // Check if the response contains an error (non-token related errors)
+            if (response.IsError && response.ErrorType != "TokenLimitExceeded")
+            {
+                _logger.LogError("Error in chat response: {ErrorType} - {ErrorMessage}", response.ErrorType, response.ErrorMessage);
+                return StatusCode(500, new { 
+                    error = response.ErrorType, 
+                    message = response.ErrorMessage,
+                    details = "Please try again or contact support if the issue persists"
+                });
+            }
+            
+            // Check if session is closed due to token limit exceeded
+            if (response.Session.IsSessionClosed)
+            {
+                _logger.LogWarning("Session closed due to token limit exceeded for thread {AgentThreadId}. Token usage: {TokenUsagePercentage:F1}%", 
+                    response.Session.AgentThreadId, response.TokenUsage.TokenUsagePercentage);
+            }
+            
+            _logger.LogInformation("Chat response sent successfully. AgentThreadId: {AgentThreadId}", response.Session.AgentThreadId);
             return Ok(response);
         }
         catch (InvalidOperationException ex)
@@ -46,20 +64,6 @@ public class AgentController : ControllerBase
                 error = "Invalid Request", 
                 message = ex.Message,
                 details = "Please check your request parameters"
-            });
-        }
-        catch (TokenLimitExceededException ex)
-        {
-            _logger.LogWarning(ex, "Token limit exceeded for thread {AgentThreadId}. Current: {CurrentTokens}, Max: {MaxTokens}", 
-                ex.AgentThreadId, ex.CurrentTokenCount, ex.MaxTokens);
-            
-            return StatusCode(429, new { 
-                error = "Token Limit Exceeded", 
-                message = ex.Message,
-                agentThreadId = ex.AgentThreadId,
-                currentTokenCount = ex.CurrentTokenCount,
-                maxTokens = ex.MaxTokens,
-                details = "Please create a new session by omitting the agentThreadId parameter or use a different thread ID"
             });
         }
         catch (AzureConfigurationException ex)
@@ -88,29 +92,56 @@ public class AgentController : ControllerBase
     }
 
     /// <summary>
-    /// Resets token usage for a specific agent thread
+    /// Deletes a specific agent thread
     /// </summary>
     /// <param name="agentThreadId">The agent thread ID</param>
     /// <returns>Success confirmation</returns>
-    [HttpPost("tokens/{agentThreadId}/reset")]
-    public ActionResult ResetTokenSession(string agentThreadId)
+    [HttpDelete("threads/{agentThreadId}")]
+    public async Task<ActionResult> DeleteThread(string agentThreadId)
     {
         try
         {
-            // Note: This would require injecting ITokenSessionService into the controller
-            // For now, we'll return a message indicating the session should be recreated
-            _logger.LogInformation("Token session reset requested for thread {AgentThreadId}", agentThreadId);
+            _logger.LogInformation("Thread deletion requested for thread {AgentThreadId}", agentThreadId);
             
-            return Ok(new { 
-                message = "Token session reset successfully. You can now continue using the same thread ID.", 
-                agentThreadId = agentThreadId,
-                note = "The session has been reset and token counts will start from 0"
+            // Call the handler to delete the thread and reset the session
+            var success = await _chatCommandHandler.DeleteThreadAsync(agentThreadId);
+            
+            if (success)
+            {
+                _logger.LogInformation("Thread {AgentThreadId} deleted successfully", agentThreadId);
+                return Ok(new { 
+                    message = "Thread deleted successfully. The Azure AI Agent thread has been permanently deleted and you can now create a new conversation.", 
+                    agentThreadId = agentThreadId,
+                    note = "The thread has been deleted and token counts will start from 0 for new conversations"
+                });
+            }
+            else
+            {
+                _logger.LogWarning("Failed to delete thread {AgentThreadId}", agentThreadId);
+                return StatusCode(500, new {
+                    error = "Thread Deletion Failed",
+                    message = "Failed to delete the thread. Please try again or contact support.",
+                    agentThreadId = agentThreadId
+                });
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid thread ID format: {AgentThreadId}", agentThreadId);
+            return BadRequest(new { 
+                error = "Invalid Thread ID", 
+                message = ex.Message,
+                agentThreadId = agentThreadId
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error resetting token session for thread {AgentThreadId}", agentThreadId);
-            return StatusCode(500, "An error occurred while resetting token session");
+            _logger.LogError(ex, "Error deleting thread {AgentThreadId}", agentThreadId);
+            return StatusCode(500, new {
+                error = "Internal Error",
+                message = "An error occurred while deleting the thread",
+                agentThreadId = agentThreadId
+            });
         }
     }
 

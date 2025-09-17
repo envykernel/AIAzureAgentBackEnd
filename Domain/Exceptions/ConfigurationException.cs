@@ -37,4 +37,13 @@ public class TokenLimitExceededException : Exception
         MaxTokens = maxTokens;
         ShouldResetSession = shouldResetSession;
     }
+
+    public TokenLimitExceededException(string agentThreadId, int currentTokenCount, int maxTokens, bool shouldResetSession, string customMessage)
+        : base(customMessage)
+    {
+        AgentThreadId = agentThreadId;
+        CurrentTokenCount = currentTokenCount;
+        MaxTokens = maxTokens;
+        ShouldResetSession = shouldResetSession;
+    }
 }

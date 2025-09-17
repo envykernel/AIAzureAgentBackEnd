@@ -1,0 +1,441 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MultiAgentsBeta API Azure",
+    "description": "API for testing MultiAgentsBeta chat functionality with Azure AI Agent integration. Features automatic agentThreadId management for seamless conversation continuity with grouped response structure.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Support",
+      "email": "support@example.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5107",
+      "description": "Development server (HTTP)"
+    },
+    {
+      "url": "https://localhost:7148",
+      "description": "Development server (HTTPS)"
+    }
+  ],
+  "paths": {
+    "/api/agent/chat": {
+      "post": {
+        "summary": "Chat with AI Agent",
+        "description": "Send a message to the AI agent and receive a response. Supports both new conversations and continuing existing conversations using agentThreadId.",
+        "operationId": "chatWithAgent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              },
+              "examples": {
+                "newConversation": {
+                  "summary": "Start a new conversation",
+                  "value": {
+                    "message": "Hello, how can you help me today?",
+                    "agentThreadId": null
+                  }
+                },
+                "continueConversation": {
+                  "summary": "Continue existing conversation",
+                  "value": {
+                    "message": "Continue our conversation",
+                    "agentThreadId": "thread_2BoH4WFlxbW0PQhOCTz8aLT7"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response from AI agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                },
+                "examples": {
+                  "normalResponse": {
+                    "summary": "Normal response with token usage",
+                    "value": {
+                      "message": "Hello! I'm here to help you with any questions you might have.",
+                      "role": "Assistant",
+                      "timestamp": "2025-09-17T08:11:10.393756Z",
+                      "tokenUsage": {
+                        "tokenCount": 25,
+                        "totalTokenCount": 25,
+                        "maxTokens": 1000,
+                        "remainingTokens": 975,
+                        "tokenUsagePercentage": 2.5
+                      },
+                      "session": {
+                        "agentThreadId": "thread_2BoH4WFlxbW0PQhOCTz8aLT7",
+                        "isSessionClosed": false,
+                        "sessionMessage": ""
+                      },
+                      "isError": false,
+                      "errorType": "",
+                      "errorMessage": ""
+                    }
+                  },
+                  "sessionClosedResponse": {
+                    "summary": "Response when session is closed due to token limit exceeded",
+                    "value": {
+                      "message": "Les frontières du Maroc sont les suivantes :\n\n1. **À l'est et au sud-est** : la frontière avec l'Algérie.\n2. **Au sud** : la région du Sahara Occidental, qui est un territoire contesté.\n\nLe Maroc est également bordé par la mer Méditerranée au nord et l'océan Atlantique à l'ouest.",
+                      "role": "Assistant",
+                      "timestamp": "2025-09-17T08:11:10.393756Z",
+                      "tokenUsage": {
+                        "tokenCount": 717,
+                        "totalTokenCount": 1343,
+                        "maxTokens": 1000,
+                        "remainingTokens": 0,
+                        "tokenUsagePercentage": 134.3
+                      },
+                      "session": {
+                        "agentThreadId": "thread_2BoH4WFlxbW0PQhOCTz8aLT7",
+                        "isSessionClosed": true,
+                        "sessionMessage": "Session closed: You have used 134.3% of your token limit (1343/1000). Please create a new session for future requests."
+                      },
+                      "isError": false,
+                      "errorType": "",
+                      "errorMessage": ""
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid Request",
+                  "message": "Invalid thread ID format. Expected format: 'thread_xxxxx'",
+                  "details": "Please check your request parameters"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Internal Error",
+                  "message": "An error occurred while processing your request",
+                  "details": "Please try again or contact support if the issue persists"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/threads/{agentThreadId}": {
+      "delete": {
+        "summary": "Delete Thread",
+        "description": "Delete a specific agent thread. This will permanently delete the Azure AI Agent thread and reset the token session.",
+        "operationId": "deleteThread",
+        "parameters": [
+          {
+            "name": "agentThreadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^thread_[a-zA-Z0-9]+$"
+            },
+            "description": "Azure AI Agent Thread ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thread deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Thread deleted successfully. The Azure AI Agent thread has been permanently deleted and you can now create a new conversation."
+                    },
+                    "agentThreadId": {
+                      "type": "string",
+                      "example": "thread_2BoH4WFlxbW0PQhOCTz8aLT7"
+                    },
+                    "note": {
+                      "type": "string",
+                      "example": "The thread has been deleted and token counts will start from 0 for new conversations"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid thread ID format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid Thread ID",
+                  "message": "Invalid thread ID format. Expected format: 'thread_xxxxx'",
+                  "agentThreadId": "invalid_thread_id"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Thread Deletion Failed",
+                  "message": "Failed to delete the thread. Please try again or contact support.",
+                  "agentThreadId": "thread_2BoH4WFlxbW0PQhOCTz8aLT7"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test/cors": {
+      "get": {
+        "summary": "Test CORS Configuration",
+        "description": "Test CORS configuration to verify frontend can call the API successfully.",
+        "operationId": "testCors",
+        "responses": {
+          "200": {
+            "description": "CORS test successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "CORS is working!"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2025-09-17T08:11:10.393756Z"
+                    },
+                    "origin": {
+                      "type": "string",
+                      "example": "http://localhost:5173"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/test/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Check API health status and environment information.",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2025-09-17T08:11:10.393756Z"
+                    },
+                    "environment": {
+                      "type": "string",
+                      "example": "Development"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatRequest": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "The message to send to the AI agent",
+            "example": "Hello, how can you help me today?"
+          },
+          "agentThreadId": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^thread_[a-zA-Z0-9]+$",
+            "description": "Azure AI Agent Thread ID for continuing conversation. Leave null or empty for new conversation.",
+            "example": "thread_2BoH4WFlxbW0PQhOCTz8aLT7"
+          }
+        }
+      },
+      "ChatResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "The AI agent's response message",
+            "example": "Hello! I'm here to help you with any questions you might have."
+          },
+          "role": {
+            "type": "string",
+            "description": "The role of the message sender",
+            "example": "Assistant"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the response was generated",
+            "example": "2025-09-17T08:11:10.393756Z"
+          },
+          "tokenUsage": {
+            "$ref": "#/components/schemas/TokenUsageInfo"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionInfo"
+          },
+          "isError": {
+            "type": "boolean",
+            "description": "Indicates if there was an error processing the request",
+            "example": false
+          },
+          "errorType": {
+            "type": "string",
+            "description": "Type of error if any occurred",
+            "example": ""
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Error message if any occurred",
+            "example": ""
+          }
+        }
+      },
+      "TokenUsageInfo": {
+        "type": "object",
+        "description": "Information about token usage for the current session",
+        "properties": {
+          "tokenCount": {
+            "type": "integer",
+            "description": "Number of tokens used for this specific response",
+            "example": 25
+          },
+          "totalTokenCount": {
+            "type": "integer",
+            "description": "Total number of tokens accumulated for this session",
+            "example": 125
+          },
+          "maxTokens": {
+            "type": "integer",
+            "description": "Maximum number of tokens allowed per session (advertised limit)",
+            "example": 1000
+          },
+          "remainingTokens": {
+            "type": "integer",
+            "description": "Number of tokens remaining before hitting the limit",
+            "example": 875
+          },
+          "tokenUsagePercentage": {
+            "type": "number",
+            "format": "double",
+            "description": "Percentage of token limit used",
+            "example": 12.5
+          }
+        }
+      },
+      "SessionInfo": {
+        "type": "object",
+        "description": "Information about the current session",
+        "properties": {
+          "agentThreadId": {
+            "type": "string",
+            "description": "Azure AI Agent Thread ID for continuing conversation",
+            "example": "thread_2BoH4WFlxbW0PQhOCTz8aLT7"
+          },
+          "isSessionClosed": {
+            "type": "boolean",
+            "description": "Indicates if the session is closed due to token limit exceeded",
+            "example": false
+          },
+          "sessionMessage": {
+            "type": "string",
+            "description": "Message explaining session status (e.g., why session was closed)",
+            "example": "Session closed: You have used 134.3% of your token limit (1343/1000). Please create a new session for future requests."
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error type or category",
+            "example": "Invalid Request"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message",
+            "example": "Invalid thread ID format. Expected format: 'thread_xxxxx'"
+          },
+          "details": {
+            "type": "string",
+            "description": "Additional details about the error",
+            "example": "Please check your request parameters"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Agent",
+      "description": "AI Agent chat operations"
+    },
+    {
+      "name": "Threads",
+      "description": "Thread management and deletion"
+    },
+    {
+      "name": "Test",
+      "description": "Testing and health check endpoints"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "your-unique-id-here",
 		"name": "MultiAgentsBeta API Azure",
-		"description": "API collection for testing MultiAgentsBeta chat functionality with Azure AI Agent integration. Features automatic agentThreadId management for seamless conversation continuity.",
+		"description": "API collection for testing MultiAgentsBeta chat functionality with Azure AI Agent integration. Features automatic agentThreadId management for seamless conversation continuity. Updated with new grouped response structure and proper thread deletion:\n\n- tokenUsage: Object containing all token-related information (tokenCount, totalTokenCount, maxTokens, remainingTokens, tokenUsagePercentage)\n- session: Object containing session information (agentThreadId, isSessionClosed, sessionMessage)\n- Graceful session closure when token limits are exceeded (>100% of advertised limit)\n- Users receive their AI response even when session is closed due to token limits\n- Proper thread deletion: DELETE /api/agent/threads/{agentThreadId} actually deletes Azure AI Agent threads\n- Automatic collection variable management for conversation continuity",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -31,7 +31,7 @@
 						"chat"
 					]
 				},
-				"description": "Start a new conversation with the AI agent. Leave agentThreadId empty or null for a new conversation. Returns:\n- message: Agent response content\n- role: Message role (Assistant)\n- timestamp: Response timestamp\n- tokenCount: Tokens used for this response\n- totalTokenCount: Accumulated tokens for this session\n- remainingTokens: Tokens remaining before hitting limit\n- tokenUsagePercentage: Percentage of token limit used\n- agentThreadId: Azure AI Agent Thread ID for continuing conversation"
+				"description": "Start a new conversation with the AI agent. Leave agentThreadId empty or null for a new conversation. Returns:\n- message: Agent response content\n- role: Message role (Assistant)\n- timestamp: Response timestamp\n- tokenUsage: Object containing token information (tokenCount, totalTokenCount, maxTokens, remainingTokens, tokenUsagePercentage)\n- session: Object containing session information (agentThreadId, isSessionClosed, sessionMessage)\n- isError: Boolean indicating if there was an error\n- errorType: Type of error if any\n- errorMessage: Error message if any"
 			},
 			"event": [
 				{
@@ -41,14 +41,19 @@
 							"// Extract agentThreadId from response and store it in collection variable",
 							"if (pm.response.code === 200) {",
 							"    const responseJson = pm.response.json();",
-							"    if (responseJson.agentThreadId) {",
-							"        pm.collectionVariables.set(\"agentThreadId\", responseJson.agentThreadId);",
-							"        console.log(\"Agent Thread ID stored:\", responseJson.agentThreadId);",
+							"    if (responseJson.session && responseJson.session.agentThreadId) {",
+							"        pm.collectionVariables.set(\"agentThreadId\", responseJson.session.agentThreadId);",
+							"        console.log(\"Agent Thread ID stored:\", responseJson.session.agentThreadId);",
 							"        console.log(\"Agent response:\", responseJson.message);",
-							"        console.log(\"Token count:\", responseJson.tokenCount);",
-							"        console.log(\"Total tokens:\", responseJson.totalTokenCount);",
-							"        console.log(\"Remaining tokens:\", responseJson.remainingTokens);",
-							"        console.log(\"Token usage %:\", responseJson.tokenUsagePercentage + \"%\");",
+							"        console.log(\"Token count:\", responseJson.tokenUsage.tokenCount);",
+							"        console.log(\"Total tokens:\", responseJson.tokenUsage.totalTokenCount);",
+							"        console.log(\"Max tokens:\", responseJson.tokenUsage.maxTokens);",
+							"        console.log(\"Remaining tokens:\", responseJson.tokenUsage.remainingTokens);",
+							"        console.log(\"Token usage %:\", responseJson.tokenUsage.tokenUsagePercentage + \"%\");",
+							"        console.log(\"Session closed:\", responseJson.session.isSessionClosed);",
+							"        if (responseJson.session.sessionMessage) {",
+							"            console.log(\"Session message:\", responseJson.session.sessionMessage);",
+							"        }",
 							"    } else {",
 							"        console.log(\"No agentThreadId found in response\");",
 							"    }",
@@ -86,7 +91,7 @@
 						"chat"
 					]
 				},
-				"description": "Continue the conversation using the agentThreadId from the previous response. The agentThreadId is automatically filled from the collection variable set by the first request. This maintains conversation context with Azure AI Agent."
+				"description": "Continue the conversation using the agentThreadId from the previous response. The agentThreadId is automatically filled from the collection variable set by the first request. This maintains conversation context with Azure AI Agent. Returns the same grouped structure as the new conversation request."
 			},
 			"event": [
 				{
@@ -96,14 +101,19 @@
 							"// Update agentThreadId if it changed in the response",
 							"if (pm.response.code === 200) {",
 							"    const responseJson = pm.response.json();",
-							"    if (responseJson.agentThreadId) {",
-							"        pm.collectionVariables.set(\"agentThreadId\", responseJson.agentThreadId);",
-							"        console.log(\"Agent Thread ID updated:\", responseJson.agentThreadId);",
+							"    if (responseJson.session && responseJson.session.agentThreadId) {",
+							"        pm.collectionVariables.set(\"agentThreadId\", responseJson.session.agentThreadId);",
+							"        console.log(\"Agent Thread ID updated:\", responseJson.session.agentThreadId);",
 							"        console.log(\"Agent response:\", responseJson.message);",
-							"        console.log(\"Token count:\", responseJson.tokenCount);",
-							"        console.log(\"Total tokens:\", responseJson.totalTokenCount);",
-							"        console.log(\"Remaining tokens:\", responseJson.remainingTokens);",
-							"        console.log(\"Token usage %:\", responseJson.tokenUsagePercentage + \"%\");",
+							"        console.log(\"Token count:\", responseJson.tokenUsage.tokenCount);",
+							"        console.log(\"Total tokens:\", responseJson.tokenUsage.totalTokenCount);",
+							"        console.log(\"Max tokens:\", responseJson.tokenUsage.maxTokens);",
+							"        console.log(\"Remaining tokens:\", responseJson.tokenUsage.remainingTokens);",
+							"        console.log(\"Token usage %:\", responseJson.tokenUsage.tokenUsagePercentage + \"%\");",
+							"        console.log(\"Session closed:\", responseJson.session.isSessionClosed);",
+							"        if (responseJson.session.sessionMessage) {",
+							"            console.log(\"Session message:\", responseJson.session.sessionMessage);",
+							"        }",
 							"    }",
 							"}"
 						],
@@ -137,45 +147,65 @@
 						"chat"
 					]
 				},
-				"description": "Example of using the stored Azure AI Agent Thread ID to continue a conversation. The agentThreadId is automatically filled from the collection variable, enabling persistent multi-turn conversations with Azure AI Agent context."
+				"description": "Example of using the stored Azure AI Agent Thread ID to continue a conversation. The agentThreadId is automatically filled from the collection variable, enabling persistent multi-turn conversations with Azure AI Agent context. Returns the same grouped structure as other chat requests."
 			}
 		},
 		{
-			"name": "Get Token Session",
+			"name": "Example - Session Closed Response",
 			"request": {
-				"method": "GET",
-				"header": [],
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"message\": \"This is a test message that might exceed token limits\",\n  \"agentThreadId\": \"{{agentThreadId}}\"\n}"
+				},
 				"url": {
-					"raw": "{{baseUrl}}/api/agent/tokens/{{agentThreadId}}",
+					"raw": "{{baseUrl}}/api/agent/chat",
 					"host": [
 						"{{baseUrl}}"
 					],
 					"path": [
 						"api",
 						"agent",
-						"tokens",
-						"{{agentThreadId}}"
+						"chat"
 					]
 				},
-				"description": "Get current token session information for a specific agent thread without making a new chat request. Returns:\n- sessionId: Session identifier\n- totalTokenCount: Accumulated tokens for this session\n- maxTokensPerSession: Maximum tokens allowed per session\n- remainingTokens: Tokens remaining before hitting limit\n- tokenUsagePercentage: Percentage of token limit used\n- lastUpdated: Timestamp of last update\n- isTokenLimitExceeded: Boolean indicating if limit is exceeded\n- isApproachingTokenLimit: Boolean indicating if approaching limit (90% threshold)"
+				"description": "Example request to demonstrate the new grouped response structure. When token limits are exceeded, the response will include:\n- tokenUsage: Object with tokenCount, totalTokenCount, maxTokens, remainingTokens, tokenUsagePercentage\n- session: Object with agentThreadId, isSessionClosed (true when >100%), sessionMessage (explains why session is closed)\n- isError: false (even when session is closed, user gets their response)\n\nThis shows how the API gracefully handles token limit exceeded by returning the user's response with a session closure message."
 			},
 			"event": [
 				{
 					"listen": "test",
 					"script": {
 						"exec": [
+							"// Demonstrate the new grouped response structure",
 							"if (pm.response.code === 200) {",
 							"    const responseJson = pm.response.json();",
-							"    console.log(\"Token Session Info:\");",
-							"    console.log(\"Session ID:\", responseJson.sessionId);",
-							"    console.log(\"Total tokens:\", responseJson.totalTokenCount);",
-							"    console.log(\"Max tokens:\", responseJson.maxTokensPerSession);",
-							"    console.log(\"Remaining tokens:\", responseJson.remainingTokens);",
-							"    console.log(\"Usage percentage:\", responseJson.tokenUsagePercentage + \"%\");",
-							"    console.log(\"Limit exceeded:\", responseJson.isTokenLimitExceeded);",
-							"    console.log(\"Approaching limit:\", responseJson.isApproachingTokenLimit);",
-							"} else if (pm.response.code === 404) {",
-							"    console.log(\"No token session found for this thread ID\");",
+							"    console.log(\"=== NEW GROUPED RESPONSE STRUCTURE ===\");",
+							"    console.log(\"Message:\", responseJson.message);",
+							"    console.log(\"Role:\", responseJson.role);",
+							"    console.log(\"Timestamp:\", responseJson.timestamp);",
+							"    console.log(\"\\n--- Token Usage Info ---\");",
+							"    console.log(\"Token Count:\", responseJson.tokenUsage.tokenCount);",
+							"    console.log(\"Total Token Count:\", responseJson.tokenUsage.totalTokenCount);",
+							"    console.log(\"Max Tokens:\", responseJson.tokenUsage.maxTokens);",
+							"    console.log(\"Remaining Tokens:\", responseJson.tokenUsage.remainingTokens);",
+							"    console.log(\"Token Usage %:\", responseJson.tokenUsage.tokenUsagePercentage + \"%\");",
+							"    console.log(\"\\n--- Session Info ---\");",
+							"    console.log(\"Agent Thread ID:\", responseJson.session.agentThreadId);",
+							"    console.log(\"Is Session Closed:\", responseJson.session.isSessionClosed);",
+							"    if (responseJson.session.sessionMessage) {",
+							"        console.log(\"Session Message:\", responseJson.session.sessionMessage);",
+							"    }",
+							"    console.log(\"\\n--- Error Info ---\");",
+							"    console.log(\"Is Error:\", responseJson.isError);",
+							"    console.log(\"Error Type:\", responseJson.errorType || \"None\");",
+							"    console.log(\"Error Message:\", responseJson.errorMessage || \"None\");",
+							"    console.log(\"\\n=== END RESPONSE STRUCTURE ===\");",
 							"} else {",
 							"    console.log(\"Request failed with status:\", pm.response.code);",
 							"}"
@@ -186,24 +216,88 @@
 			]
 		},
 		{
-			"name": "Reset Token Session",
+			"name": "Workflow - Delete Thread After Session Closed",
 			"request": {
-				"method": "POST",
+				"method": "DELETE",
 				"header": [],
 				"url": {
-					"raw": "{{baseUrl}}/api/agent/tokens/{{agentThreadId}}/reset",
+					"raw": "{{baseUrl}}/api/agent/threads/{{agentThreadId}}",
 					"host": [
 						"{{baseUrl}}"
 					],
 					"path": [
 						"api",
 						"agent",
-						"tokens",
-						"{{agentThreadId}}",
-						"reset"
+						"threads",
+						"{{agentThreadId}}"
 					]
 				},
-				"description": "Reset token usage for a specific agent thread. This will clear the accumulated token count for the session and start fresh. Useful when you want to reset token tracking without losing the conversation context."
+				"description": "Demonstrates the complete workflow: when a session is closed due to token limits, use this endpoint to properly delete the Azure AI Agent thread and reset the token session. This provides a clean slate for starting a new conversation. The thread will be permanently deleted from Azure AI Agent."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Demonstrate the complete thread deletion workflow",
+							"if (pm.response.code === 200) {",
+							"    const responseJson = pm.response.json();",
+							"    console.log(\"=== COMPLETE THREAD DELETION WORKFLOW ===\");",
+							"    console.log(\"✅ Thread Deletion Status: SUCCESS\");",
+							"    console.log(\"Message:\", responseJson.message);",
+							"    console.log(\"Deleted Thread ID:\", responseJson.agentThreadId);",
+							"    console.log(\"Note:\", responseJson.note);",
+							"    console.log(\"\\n🔄 Workflow Summary:\");",
+							"    console.log(\"1. Session was closed due to token limit exceeded\");",
+							"    console.log(\"2. User received their AI response with session closure message\");",
+							"    console.log(\"3. Thread was properly deleted from Azure AI Agent\");",
+							"    console.log(\"4. Token session was reset locally\");",
+							"    console.log(\"5. Ready for a fresh conversation!\");",
+							"    console.log(\"\\n⚠️  IMPORTANT: The thread has been permanently deleted!\");",
+							"    console.log(\"You must create a new conversation to continue.\");",
+							"    // Clear the stored agentThreadId since the thread is deleted",
+							"    pm.collectionVariables.unset(\"agentThreadId\");",
+							"    console.log(\"\\n✅ Collection variable 'agentThreadId' has been cleared.\");",
+							"    console.log(\"\\n=== WORKFLOW COMPLETE ===\");",
+							"} else if (pm.response.code === 400) {",
+							"    const responseJson = pm.response.json();",
+							"    console.log(\"❌ Invalid Thread ID:\");",
+							"    console.log(\"Error:\", responseJson.error);",
+							"    console.log(\"Message:\", responseJson.message);",
+							"    console.log(\"Thread ID:\", responseJson.agentThreadId);",
+							"} else if (pm.response.code === 500) {",
+							"    const responseJson = pm.response.json();",
+							"    console.log(\"❌ Thread Deletion Failed:\");",
+							"    console.log(\"Error:\", responseJson.error);",
+							"    console.log(\"Message:\", responseJson.message);",
+							"    console.log(\"Thread ID:\", responseJson.agentThreadId);",
+							"} else {",
+							"    console.log(\"❌ Unexpected response status:\", pm.response.code);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			]
+		},
+		{
+			"name": "Delete Thread",
+			"request": {
+				"method": "DELETE",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/agent/threads/{{agentThreadId}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"agent",
+						"threads",
+						"{{agentThreadId}}"
+					]
+				},
+				"description": "Delete a specific agent thread. This will permanently delete the Azure AI Agent thread and reset the token session. The thread will be permanently deleted and you'll need to create a new conversation for a fresh start."
 			},
 			"event": [
 				{
@@ -212,11 +306,27 @@
 						"exec": [
 							"if (pm.response.code === 200) {",
 							"    const responseJson = pm.response.json();",
-							"    console.log(\"Token session reset successfully:\");",
+							"    console.log(\"=== THREAD DELETION SUCCESSFUL ===\");",
 							"    console.log(\"Message:\", responseJson.message);",
-							"    console.log(\"Agent Thread ID:\", responseJson.agentThreadId);",
+							"    console.log(\"Deleted Thread ID:\", responseJson.agentThreadId);",
+							"    console.log(\"Note:\", responseJson.note);",
+							"    console.log(\"\\n⚠️  IMPORTANT: The Azure AI Agent thread has been permanently deleted!\");",
+							"    console.log(\"You need to create a new conversation for a fresh start.\");",
+							"    // Clear the stored agentThreadId since the thread is deleted",
+							"    pm.collectionVariables.unset(\"agentThreadId\");",
+							"    console.log(\"\\n✅ Collection variable 'agentThreadId' has been cleared.\");",
+							"} else if (pm.response.code === 400) {",
+							"    const responseJson = pm.response.json();",
+							"    console.log(\"❌ Bad Request:\");",
+							"    console.log(\"Error:\", responseJson.error);",
+							"    console.log(\"Message:\", responseJson.message);",
+							"} else if (pm.response.code === 500) {",
+							"    const responseJson = pm.response.json();",
+							"    console.log(\"❌ Server Error:\");",
+							"    console.log(\"Error:\", responseJson.error);",
+							"    console.log(\"Message:\", responseJson.message);",
 							"} else {",
-							"    console.log(\"Request failed with status:\", pm.response.code);",
+							"    console.log(\"❌ Request failed with status:\", pm.response.code);",
 							"}"
 						],
 						"type": "text/javascript"

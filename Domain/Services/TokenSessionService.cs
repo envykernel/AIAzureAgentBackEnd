@@ -9,18 +9,23 @@ public interface ITokenSessionService
     void UpdateSession(string agentThreadId, int additionalTokens);
     void ResetSession(string agentThreadId);
     bool CheckTokenLimit(string agentThreadId, int additionalTokens, bool autoResetOnExceeded = false);
+    void BlockSession(string agentThreadId);
 }
 
 public class TokenSessionService : ITokenSessionService
 {
     private readonly ConcurrentDictionary<string, TokenSessionInfo> _sessions = new();
-    private readonly int _maxTokensPerSession;
+    private readonly int _advertisedMaxTokensPerSession;
+    private readonly int _realMaxTokensPerSession;
     private readonly bool _autoResetOnLimitExceeded;
+    private readonly double _warningThresholdPercentage;
 
-    public TokenSessionService(int maxTokensPerSession, bool autoResetOnLimitExceeded = false)
+    public TokenSessionService(int advertisedMaxTokensPerSession, int realMaxTokensPerSession, bool autoResetOnLimitExceeded = false, double warningThresholdPercentage = 90.0)
     {
-        _maxTokensPerSession = maxTokensPerSession;
+        _advertisedMaxTokensPerSession = advertisedMaxTokensPerSession;
+        _realMaxTokensPerSession = realMaxTokensPerSession;
         _autoResetOnLimitExceeded = autoResetOnLimitExceeded;
+        _warningThresholdPercentage = warningThresholdPercentage;
     }
 
     public TokenSessionInfo GetOrCreateSession(string agentThreadId)
@@ -29,9 +34,11 @@ public class TokenSessionService : ITokenSessionService
         {
             AgentThreadId = agentThreadId,
             TotalTokenCount = 0,
-            MaxTokens = _maxTokensPerSession,
-            RemainingTokens = _maxTokensPerSession,
-            TokenUsagePercentage = 0.0
+            MaxTokens = _advertisedMaxTokensPerSession, // Show advertised limit to users
+            RemainingTokens = _advertisedMaxTokensPerSession,
+            TokenUsagePercentage = 0.0,
+            IsBlocked = false,
+            IsWarningThresholdReached = false
         });
     }
 
@@ -39,29 +46,40 @@ public class TokenSessionService : ITokenSessionService
     {
         var session = GetOrCreateSession(agentThreadId);
         session.TotalTokenCount += additionalTokens;
-        session.RemainingTokens = Math.Max(0, _maxTokensPerSession - session.TotalTokenCount);
-        session.TokenUsagePercentage = _maxTokensPerSession > 0 ? (double)session.TotalTokenCount / _maxTokensPerSession * 100.0 : 0.0;
+        
+        // Calculate remaining tokens and percentage based on ADVERTISED limit (what users see)
+        session.RemainingTokens = Math.Max(0, _advertisedMaxTokensPerSession - session.TotalTokenCount);
+        session.TokenUsagePercentage = _advertisedMaxTokensPerSession > 0 ? (double)session.TotalTokenCount / _advertisedMaxTokensPerSession * 100.0 : 0.0;
+        
+        // Check if warning threshold is reached (based on advertised limit)
+        session.IsWarningThresholdReached = session.TokenUsagePercentage >= _warningThresholdPercentage;
+        
+        // Note: Session blocking is now handled in CheckTokenLimit method
     }
 
     public bool CheckTokenLimit(string agentThreadId, int additionalTokens, bool autoResetOnExceeded = false)
     {
         var session = GetOrCreateSession(agentThreadId);
-        var projectedTotal = session.TotalTokenCount + additionalTokens;
         
-        if (projectedTotal > _maxTokensPerSession)
+        // If session is already blocked, prevent new requests
+        if (session.IsBlocked)
         {
-            if (autoResetOnExceeded || _autoResetOnLimitExceeded)
-            {
-                ResetSession(agentThreadId);
-                return true; // Allow the request after reset
-            }
-            else
-            {
-                throw new TokenLimitExceededException(agentThreadId, session.TotalTokenCount, _maxTokensPerSession, false);
-            }
+            throw new TokenLimitExceededException(agentThreadId, session.TotalTokenCount, _advertisedMaxTokensPerSession, false, "Session is blocked due to previous token limit exceeded");
         }
         
-        return true; // Within limits
+        var projectedTotal = session.TotalTokenCount + additionalTokens;
+        
+        // Block session immediately if this request would exceed the REAL limit
+        if (projectedTotal > _realMaxTokensPerSession)
+        {
+            // Mark session as blocked immediately
+            session.IsBlocked = true;
+            throw new TokenLimitExceededException(agentThreadId, session.TotalTokenCount, _advertisedMaxTokensPerSession, false, 
+                $"Session blocked: This request would exceed the real token limit. Current: {session.TotalTokenCount}, Request: {additionalTokens}, Real Limit: {_realMaxTokensPerSession}");
+        }
+        
+        // Allow requests that exceed advertised limit but not real limit
+        return true;
     }
 
     public void ResetSession(string agentThreadId)
@@ -69,9 +87,17 @@ public class TokenSessionService : ITokenSessionService
         if (_sessions.TryGetValue(agentThreadId, out var session))
         {
             session.TotalTokenCount = 0;
-            session.RemainingTokens = _maxTokensPerSession;
+            session.RemainingTokens = _advertisedMaxTokensPerSession;
             session.TokenUsagePercentage = 0.0;
+            session.IsBlocked = false;
+            session.IsWarningThresholdReached = false;
         }
+    }
+
+    public void BlockSession(string agentThreadId)
+    {
+        var session = GetOrCreateSession(agentThreadId);
+        session.IsBlocked = true;
     }
 }
 
@@ -82,4 +108,6 @@ public class TokenSessionInfo
     public int MaxTokens { get; set; } = 0;
     public int RemainingTokens { get; set; } = 0;
     public double TokenUsagePercentage { get; set; } = 0.0;
+    public bool IsBlocked { get; set; } = false;
+    public bool IsWarningThresholdReached { get; set; } = false;
 }
