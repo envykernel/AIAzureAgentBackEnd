@@ -1,0 +1,30 @@
+{
+  "categories": [
+    {
+      "id": "geography",
+      "name": "Geography",
+      "icon": "🌍",
+      "description": "Explore the world, countries, capitals, and geographical features",
+      "questions": [
+        "What are the capitals of European countries?",
+        "Tell me about the geography of Africa",
+        "What are the longest rivers in the world?",
+        "Describe the climate zones of Earth",
+        "What are the highest mountains on each continent?"
+      ]
+    },
+    {
+      "id": "flights",
+      "name": "Flights & Travel",
+      "icon": "✈️",
+      "description": "Flight information, customer rights, and travel assistance",
+      "questions": [
+        "What are my rights if my flight is delayed?",
+        "Can I get compensation for a cancelled flight?",
+        "What should I do if my luggage is lost?",
+        "How can I change my flight booking?",
+        "What documents do I need for international travel?"
+      ]
+    }
+  ]
+}

@@ -19,7 +19,18 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Snackbar
+  Snackbar,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemButton,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Card,
+  CardContent,
+  CardHeader,
+  Grid
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -32,10 +43,12 @@ import {
   Percent as PercentIcon,
   CheckCircle as CheckCircleIcon,
   Close as CloseIcon,
-  ContentCopy as CopyIcon
+  ContentCopy as CopyIcon,
+  Help as HelpIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { apiService } from './services/apiService';
+import predefinedQuestions from './data/predefinedQuestions.json';
 import './App.css';
 
 // Types for API responses
@@ -258,6 +271,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsThreadId, setSettingsThreadId] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [isQuestionsOpen, setIsQuestionsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -268,12 +282,22 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading || isSessionClosed) return;
+  const handleSelectQuestion = (question: string) => {
+    setInputMessage(question);
+    setIsQuestionsOpen(false);
+    // Automatically send the question
+    setTimeout(() => {
+      sendMessageWithText(question);
+    }, 100);
+  };
+
+  const sendMessageWithText = async (messageText?: string) => {
+    const textToSend = messageText || inputMessage;
+    if (!textToSend.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      content: inputMessage,
+      content: textToSend,
       role: 'user',
       timestamp: new Date(),
     };
@@ -285,7 +309,7 @@ function App() {
 
     try {
       const request: ChatRequest = {
-        message: inputMessage,
+        message: textToSend,
         agentThreadId: agentThreadId || undefined,
       };
 
@@ -324,6 +348,10 @@ function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const sendMessage = async () => {
+    await sendMessageWithText();
   };
 
   const handleKeyPress = (event: React.KeyboardEvent) => {
@@ -392,6 +420,14 @@ function App() {
         console.error('Failed to copy thread ID:', err);
       }
     }
+  };
+
+  const handleOpenQuestions = () => {
+    setIsQuestionsOpen(true);
+  };
+
+  const handleCloseQuestions = () => {
+    setIsQuestionsOpen(false);
   };
 
   return (
@@ -664,9 +700,152 @@ function App() {
             >
               {isLoading ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
             </SendButton>
+            <Tooltip title="Predefined Questions">
+              <IconButton
+                onClick={handleOpenQuestions}
+                sx={{
+                  minWidth: '36px',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  backgroundColor: '#f3f4f6',
+                  color: '#6b7280',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    backgroundColor: '#e5e7eb',
+                    transform: 'scale(1.05)',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                  },
+                  '&:active': {
+                    transform: 'scale(0.95)',
+                  },
+                }}
+              >
+                <HelpIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
           </InputContainer>
         </Footer>
       )}
+      
+      {/* Questions Modal */}
+      <Dialog open={isQuestionsOpen} onClose={handleCloseQuestions} maxWidth="lg" fullWidth>
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          backgroundColor: '#007bff',
+          color: 'white',
+          p: 3
+        }}>
+          <Box display="flex" alignItems="center" gap={2}>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              Predefined Questions
+            </Typography>
+            <Chip 
+              label={`${predefinedQuestions.categories.reduce((total, cat) => total + cat.questions.length, 0)} questions`}
+              sx={{ 
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                fontWeight: 500
+              }} 
+            />
+          </Box>
+          <IconButton onClick={handleCloseQuestions} size="small" sx={{ color: 'white' }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        
+        <DialogContent sx={{ p: 2, backgroundColor: '#f8fafc' }}>
+          <Box sx={{ mt: 3 }}>
+            <Grid container spacing={2}>
+            {predefinedQuestions.categories.map((category) => (
+              <Grid item xs={12} md={6} key={category.id}>
+                <Card 
+                  sx={{ 
+                    height: '100%',
+                    borderRadius: 3,
+                    boxShadow: '0 4px 12px rgba(0,123,255,0.15)',
+                    border: '1px solid rgba(0,123,255,0.1)',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: '0 8px 24px rgba(0,123,255,0.25)',
+                    }
+                  }}
+                >
+                  <CardHeader
+                    sx={{
+                      backgroundColor: '#007bff',
+                      color: 'white',
+                      borderRadius: '12px 12px 0 0',
+                      pb: 0.5,
+                      pt: 2,
+                      px: 2
+                    }}
+                    title={
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        {category.name}
+                      </Typography>
+                    }
+                    subheader={
+                      <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)', mt: 0.5 }}>
+                        {category.description}
+                      </Typography>
+                    }
+                    action={
+                      <Chip 
+                        label={`${category.questions.length} questions`} 
+                        size="small" 
+                        sx={{ 
+                          backgroundColor: 'rgba(255,255,255,0.2)',
+                          color: 'white',
+                          fontWeight: 500,
+                          fontSize: '11px'
+                        }} 
+                      />
+                    }
+                  />
+                  <CardContent sx={{ p: 0 }}>
+                    <List sx={{ py: 1 }}>
+                      {category.questions.map((question, index) => (
+                        <ListItem key={index} disablePadding>
+                          <ListItemButton
+                            onClick={() => handleSelectQuestion(question)}
+                            sx={{
+                              py: 1,
+                              px: 1.5,
+                              borderBottom: index < category.questions.length - 1 ? '1px solid #f1f5f9' : 'none',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                backgroundColor: '#f0f9ff',
+                                borderLeft: '4px solid #007bff',
+                                pl: '10px'
+                              }
+                            }}
+                          >
+                            <ListItemText
+                              primary={question}
+                              primaryTypographyProps={{
+                                fontSize: '14px',
+                                color: '#374151',
+                                lineHeight: 1.4,
+                                fontWeight: 400
+                              }}
+                            />
+                          </ListItemButton>
+                        </ListItem>
+                      ))}
+                    </List>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+          </Box>
+        </DialogContent>
+      </Dialog>
       
       {/* Settings Dialog */}
       <Dialog open={isSettingsOpen} onClose={handleCloseSettings} maxWidth="sm" fullWidth>
